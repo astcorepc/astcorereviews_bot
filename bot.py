@@ -156,7 +156,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             await query.edit_message_text(
                 text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
             )
-                text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
+        text = f"⭐ **Новый отзыв о нас!**\n\n{review_body if review_body else 'Текст не указан'}"
             )
             await query.edit_message_text(
                 text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
