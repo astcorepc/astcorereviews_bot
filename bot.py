@@ -258,7 +258,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if service_id == "service_4" and context.user_data.get('extras') is None:
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
-                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Не указаны')}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Настройка BIOS\n• Кабельный менеджмент\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n\nЕсли дополнений нет, напишите 'Нет'.",
+                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Не указаны')}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n• Другие дополнения (опишите)\n\nЕсли у вас есть дополнения, опишите их выше. Если нет — просто напишите 'Нет'.",
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
@@ -347,7 +347,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.get('selected_service_id') == "service_4":
             context.user_data['waiting_for_extras'] = True
             await update.message.reply_text(
-                f"✅ **Пожелания сохранены:**\n{text}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Настройка BIOS\n• Кабельный менеджмент\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n\nЕсли дополнений нет, напишите 'Нет'.",
+                f"✅ **Пожелания сохранены:**\n{text}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n• Другие дополнения (опишите)\n\nЕсли у вас есть дополнения, опишите их выше. Если нет — просто напишите 'Нет'.",
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
