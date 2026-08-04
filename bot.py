@@ -137,12 +137,26 @@ def time_keyboard(date_iso):
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_booking_date")])
     return InlineKeyboardMarkup(keyboard)
 
+def clear_user_data(context):
+    """Полная очистка всех данных пользователя"""
+    keys_to_clear = [
+        'waiting_for_review', 'waiting_for_support', 'waiting_for_contact',
+        'waiting_for_budget', 'waiting_for_wishes', 'waiting_for_extras',
+        'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
+        'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
+        'review_text', 'review_photo', 'booking_step'
+    ]
+    for key in keys_to_clear:
+        if key in context.user_data:
+            del context.user_data[key]
+
 # ==========================================
 # 2. ОБРАБОТЧИКИ КОМАНД И КНОПОК
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Команда /start"""
+    """Команда /start — очищает всё и показывает главное меню"""
+    clear_user_data(context)
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
         "Мы ценим каждого клиента.\n\n"
@@ -160,6 +174,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "review":
+        clear_user_data(context)
         await query.edit_message_text(
             "⭐ **Оцените нас от 1 до 5:**",
             reply_markup=rating_keyboard(),
@@ -168,6 +183,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "support_menu":
+        clear_user_data(context)
         await query.edit_message_text(
             "🛠 **Выберите тему вашего вопроса:**",
             reply_markup=support_topics_keyboard(),
@@ -176,6 +192,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "booking":
+        clear_user_data(context)
         await query.edit_message_text(
             "💵 **Выберите услугу из списка:**",
             reply_markup=services_keyboard(),
@@ -184,10 +201,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "back_to_main":
-        context.user_data['waiting_for_support'] = False
-        context.user_data['waiting_for_review'] = False
-        context.user_data['booking_step'] = None
-        
+        clear_user_data(context)
         await query.edit_message_text(
             "💻 **Главное меню**",
             reply_markup=main_keyboard(),
@@ -196,6 +210,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "back_to_services":
+        context.user_data['booking_step'] = None
         await query.edit_message_text(
             "💵 **Выберите услугу из списка:**",
             reply_markup=services_keyboard(),
@@ -239,34 +254,29 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_service_id'] = query.data
         context.user_data['booking_step'] = 'service_selected'
         
-        # --- СБОРКА ПК (из ваших комплектующих) — ТОЛЬКО ПОЖЕЛАНИЯ ---
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
                 "📝 **Напишите ваши пожелания по сборке:**\n\n"
-                "Например: для игр, для работы, какой процессор, видеокарта и т.д.\n\n"
-                "⬅️ Если хотите вернуться к выбору услуги, нажмите кнопку назад.",
+                "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
         
-        # --- СБОРКА ПК (под ключ) — БЮДЖЕТ + ПОЖЕЛАНИЯ + ДОПОЛНЕНИЯ ---
         elif query.data == "service_5":
             context.user_data['waiting_for_budget'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
                 "💰 **Какой у вас бюджет на сборку?**\n\n"
-                "Напишите сумму в рублях (например: 80 000 ₽)\n\n"
-                "⬅️ Если хотите вернуться к выбору услуги, нажмите кнопку назад.",
+                "Напишите сумму в рублях (например: 80 000 ₽)",
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
         
-        # --- ОСТАЛЬНЫЕ УСЛУГИ ---
         else:
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Нет"
@@ -308,15 +318,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("time_"):
         time_str = query.data.replace("time_", "")
         context.user_data['selected_time'] = time_str
-        context.user_data['booking_step'] = 'contacts'
         
         date_obj = datetime.fromisoformat(context.user_data.get('selected_date'))
         date_formatted = date_obj.strftime("%d.%m.%Y")
         weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
         weekday = weekday_names.get(date_obj.weekday(), "")
         
-        # Если это сборка ПК (под ключ) и ещё не вводили дополнения
-        if context.user_data.get('selected_service_id') == "service_5" and not context.user_data.get('extras'):
+        service_id = context.user_data.get('selected_service_id', '')
+        
+        if service_id == "service_5" and not context.user_data.get('extras'):
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
@@ -328,18 +338,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• Установка дополнительного ПО\n"
                 "• Настройка BIOS\n"
                 "• Кабельный менеджмент\n"
-                "• Дополнительные вентиляторы\n"
-                "• Или что-то другое\n\n"
+                "• Дополнительные вентиляторы\n\n"
                 "Если дополнений нет, напишите 'Нет'.",
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
         
-        # Если дополнения уже есть или услуга не требует дополнений
-        service_id = context.user_data.get('selected_service_id', '')
         if service_id == "service_4" and not context.user_data.get('wishes'):
-            # Сборка из ваших — запрашиваем пожелания
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
@@ -352,7 +358,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Всё заполнено — показываем ввод контактов
         await show_contact_input(update, context, date_formatted, weekday)
         return
 
@@ -434,12 +439,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
-    # --- ВВОД БЮДЖЕТА (только для "под ключ") ---
+    # --- ВВОД БЮДЖЕТА ---
     if context.user_data.get('waiting_for_budget'):
         if text:
             context.user_data['budget'] = text
             context.user_data['waiting_for_budget'] = False
-            # После бюджета запрашиваем пожелания
             context.user_data['waiting_for_wishes'] = True
             await update.message.reply_text(
                 f"✅ **Бюджет сохранён:** {text}\n\n"
@@ -462,7 +466,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['wishes'] = text
             context.user_data['waiting_for_wishes'] = False
             
-            # Если это сборка под ключ — переходим к дополнениям
             if context.user_data.get('selected_service_id') == "service_5":
                 context.user_data['waiting_for_extras'] = True
                 await update.message.reply_text(
@@ -472,15 +475,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "• Установка дополнительного ПО\n"
                     "• Настройка BIOS\n"
                     "• Кабельный менеджмент\n"
-                    "• Дополнительные вентиляторы\n"
-                    "• Или что-то другое\n\n"
+                    "• Дополнительные вентиляторы\n\n"
                     "Если дополнений нет, напишите 'Нет'.",
                     reply_markup=back_keyboard(),
                     parse_mode="Markdown"
                 )
                 return
-            
-            # Для остальных услуг (включая сборку из ваших комплектующих) переходим к дате
             else:
                 await update.message.reply_text(
                     f"✅ **Пожелания сохранены:**\n{text}\n\n"
@@ -500,7 +500,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    # --- ВВОД ДОПОЛНЕНИЙ (только для "под ключ") ---
+    # --- ВВОД ДОПОЛНЕНИЙ ---
     if context.user_data.get('waiting_for_extras'):
         if text:
             context.user_data['extras'] = text
@@ -538,6 +538,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "Вернуться в меню: /start",
                 parse_mode="Markdown"
             )
+            
+            clear_user_data(context)
             return
         else:
             await update.message.reply_text(
@@ -570,6 +572,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await send_review_to_admin(update, context, user, text, photo)
         context.user_data['waiting_for_review'] = False
+        clear_user_data(context)
         return
 
     # --- РЕЖИМ ТИКЕТА ---
@@ -595,6 +598,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await send_ticket_to_admin(update, context, user, text, file_id, file_type)
         context.user_data['waiting_for_support'] = False
+        clear_user_data(context)
         return
 
     await update.message.reply_text(
@@ -603,7 +607,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==========================================
-# 7. ОТПРАВКА АДМИНУ (ЗАПИСЬ)
+# 7-10. ОТПРАВКИ АДМИНУ (без изменений)
 # ==========================================
 
 async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
@@ -642,15 +646,10 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         f"🕐 Время: {time_str}\n"
     )
     
-    # Добавляем бюджет только для "под ключ"
     if budget and budget != "Не требуется":
         caption += f"💰 Бюджет: {budget}\n"
-    
-    # Добавляем пожелания (для всех сборок)
     if wishes and wishes != "Нет":
         caption += f"📝 Пожелания:\n{wishes}\n"
-    
-    # Добавляем дополнения только для "под ключ"
     if extras and extras != "Нет" and context.user_data.get('selected_service_id') == "service_5":
         caption += f"➕ Дополнения:\n{extras}"
 
@@ -660,10 +659,6 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         reply_markup=reply_markup,
         parse_mode="Markdown"
     )
-
-# ==========================================
-# 8. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
-# ==========================================
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
     rating = context.user_data.get('rating', 0)
@@ -704,10 +699,6 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
         parse_mode="Markdown"
     )
-
-# ==========================================
-# 9. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
-# ==========================================
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
     topic = context.user_data.get('support_topic', 'Без темы')
@@ -763,10 +754,6 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="Markdown"
     )
 
-# ==========================================
-# 10. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
-# ==========================================
-
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -780,7 +767,32 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     caption = msg.caption if msg.caption else msg.text
 
-    # --- ЗАПИСЬ ---
     if query.data == "booking_confirm":
         await query.edit_message_text(
-            text=f"✅
+            text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\n{caption}",
+            parse_mode="Markdown"
+        )
+        return
+
+    if query.data == "booking_cancel":
+        await query.edit_message_text(
+            text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}",
+            parse_mode="Markdown"
+        )
+        return
+
+    if query.data == "publish_review":
+        if CHANNEL_ID:
+            if photo:
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
+            else:
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
+
+            await query.edit_message_caption(
+                caption="✅ **Опубликовано в канале**",
+                parse_mode="Markdown"
+            ) if photo else await query.edit_message_text(
+                text="✅ **Опубликовано в канале**",
+                parse_mode="Markdown"
+            )
+       
