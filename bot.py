@@ -19,7 +19,7 @@ def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
         [InlineKeyboardButton("🛠 Поддержка", callback_data="support_menu")],
-        [InlineKeyboardButton("📢 Наш канал", url="https://t.me/ваш_канал")]
+        [InlineKeyboardButton("📢 Наш канал", url="https://t.me/astcorepc1")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -71,7 +71,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # --- КНОПКА "ПОДАТЬ ОТЗЫВ" ---
     if query.data == "review":
         await query.edit_message_text(
             "⭐ **Оцените нас от 1 до 5:**",
@@ -80,7 +79,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # --- КНОПКА "ПОДДЕРЖКА" ---
     if query.data == "support_menu":
         await query.edit_message_text(
             "🛠 **Выберите тему вашего вопроса:**",
@@ -89,9 +87,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # --- КНОПКА "НАЗАД" (ВОЗВРАТ В ГЛАВНОЕ МЕНЮ) ---
     if query.data == "back_to_main":
-        # Сбрасываем все состояния
         context.user_data['waiting_for_support'] = False
         context.user_data['waiting_for_review'] = False
         
@@ -103,11 +99,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 # ==========================================
-# 3. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
+# 3. ОБРАБОТКА ВЫБОРА ОЦЕНКИ
 # ==========================================
 
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пользователь выбрал оценку"""
     query = update.callback_query
     await query.answer()
 
@@ -120,16 +115,15 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Теперь напишите ваш отзыв текстом.\n"
         "Если хотите — приложите фото (одно).\n\n"
         "Отправьте текст и фото (если есть) одним сообщением.",
-        reply_markup=back_keyboard(),  # <-- КНОПКА НАЗАД
+        reply_markup=back_keyboard(),
         parse_mode="Markdown"
     )
 
 # ==========================================
-# 4. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА (ПОДДЕРЖКА)
+# 4. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА
 # ==========================================
 
 async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пользователь выбрал тему для тикета"""
     query = update.callback_query
     await query.answer()
 
@@ -148,19 +142,17 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "Опишите вашу ситуацию максимально подробно.\n"
         "Приложите фото или видео, если это поможет решить вопрос быстрее.\n\n"
         "После отправки мы свяжемся с вами в ближайшее время. ⏳",
-        reply_markup=back_keyboard(),  # <-- КНОПКА НАЗАД
+        reply_markup=back_keyboard(),
         parse_mode="Markdown"
     )
 
 # ==========================================
-# 5. ПРИЁМ СООБЩЕНИЙ (ОТЗЫВЫ + ТИКЕТЫ)
+# 5. ПРИЁМ СООБЩЕНИЙ
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка входящих сообщений (текст, фото)"""
     user = update.effective_user
 
-    # --- 5.1. РЕЖИМ ОТЗЫВА ---
     if context.user_data.get('waiting_for_review'):
         text = update.message.caption if update.message.caption else update.message.text
         photo = None
@@ -187,7 +179,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_for_review'] = False
         return
 
-    # --- 5.2. РЕЖИМ ТИКЕТА ---
     if context.user_data.get('waiting_for_support'):
         text = update.message.caption if update.message.caption else update.message.text
         file_id = None
@@ -213,7 +204,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_for_support'] = False
         return
 
-    # --- 5.3. ЕСЛИ НЕ В РЕЖИМЕ ---
     await update.message.reply_text(
         "Используйте кнопки меню или /start",
         reply_markup=main_keyboard()
@@ -224,7 +214,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==========================================
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
-    """Отправка отзыва админу"""
     rating = context.user_data.get('rating', 0)
 
     keyboard = [
@@ -269,7 +258,6 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==========================================
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
-    """Отправка тикета админу"""
     topic = context.user_data.get('support_topic', 'Без темы')
 
     keyboard = [
@@ -328,7 +316,6 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ нажал кнопку"""
     query = update.callback_query
     await query.answer()
 
@@ -341,7 +328,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     caption = msg.caption if msg.caption else msg.text
 
-    # --- ОТЗЫВЫ ---
     if query.data == "publish_review":
         if CHANNEL_ID:
             if photo:
@@ -373,7 +359,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-    # --- ТИКЕТЫ ---
     if query.data == "ticket_accepted":
         await query.edit_message_caption(
             caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
@@ -408,7 +393,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
 
-    print("✅ Бот запущен (отзывы + тикеты + кнопка Назад)!")
+    print("✅ Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
