@@ -19,10 +19,12 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === КНОПКИ ОЦЕНКИ (3 ⭐, 4 ⭐, 5 ⭐) ===
+# === КНОПКИ ОЦЕНКИ (1 ⭐, 2 ⭐, 3 ⭐, 4 ⭐, 5 ⭐) ===
 def rating_keyboard():
     keyboard = [
         [
+            InlineKeyboardButton("1 ⭐", callback_data="rate_1"),
+            InlineKeyboardButton("2 ⭐", callback_data="rate_2"),
             InlineKeyboardButton("3 ⭐", callback_data="rate_3"),
             InlineKeyboardButton("4 ⭐", callback_data="rate_4"),
             InlineKeyboardButton("5 ⭐", callback_data="rate_5")
@@ -69,7 +71,6 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['rating'] = rating
     context.user_data['waiting_for_review'] = True
 
-    # ВАЖНО: пишем "Вы выбрали 3 ⭐" (цифра + одна звезда)
     await query.edit_message_text(
         f"📝 **Вы выбрали {rating} ⭐**\n\n"
         "Теперь напишите ваш отзыв текстом.\n"
@@ -130,7 +131,6 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # ВАЖНО: админу тоже приходит "3 ⭐" (цифра + одна звезда)
     caption = (
         f"📩 **Новый отзыв**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
