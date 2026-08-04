@@ -134,6 +134,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
 
 # === Запуск ===
+# === Запуск ===
 def main():
     app = Application.builder().token(TOKEN).build()
 
@@ -143,12 +144,8 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("✅ Бот запущен и готов к работе!")
-)
-    import logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
-)
-application.run_polling(allowed_updates=Update.ALL_TYPES)
+    
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
 if __name__ == "__main__":
     main()
