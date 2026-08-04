@@ -48,13 +48,6 @@ def support_topics_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-def back_keyboard():
-    """Клавиатура с одной кнопкой 'Назад'"""
-    keyboard = [
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
 def services_keyboard():
     """Выбор услуги из прайс-листа"""
     keyboard = [
@@ -137,6 +130,10 @@ def time_keyboard(date_iso):
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_booking_date")])
     return InlineKeyboardMarkup(keyboard)
 
+# ==========================================
+# 2. ФУНКЦИЯ ОЧИСТКИ ДАННЫХ
+# ==========================================
+
 def clear_user_data(context):
     """Полная очистка всех данных пользователя"""
     keys_to_clear = [
@@ -151,7 +148,7 @@ def clear_user_data(context):
             del context.user_data[key]
 
 # ==========================================
-# 2. ОБРАБОТЧИКИ КОМАНД И КНОПОК
+# 3. ОБРАБОТЧИКИ КОМАНД И КНОПОК
 # ==========================================
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -210,7 +207,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "back_to_services":
-        context.user_data['booking_step'] = None
         await query.edit_message_text(
             "💵 **Выберите услугу из списка:**",
             reply_markup=services_keyboard(),
@@ -252,7 +248,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         service = services_map.get(query.data, "Неизвестная услуга")
         context.user_data['selected_service'] = service
         context.user_data['selected_service_id'] = query.data
-        context.user_data['booking_step'] = 'service_selected'
         
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
@@ -261,7 +256,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
                 "📝 **Напишите ваши пожелания по сборке:**\n\n"
                 "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
-                reply_markup=back_keyboard(),
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -272,7 +267,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
                 "💰 **Какой у вас бюджет на сборку?**\n\n"
                 "Напишите сумму в рублях (например: 80 000 ₽)",
-                reply_markup=back_keyboard(),
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -281,7 +276,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Нет"
             context.user_data['extras'] = "Нет"
-            context.user_data['booking_step'] = 'date'
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
                 "📅 **Теперь выберите дату:**\n\n"
@@ -298,7 +292,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if query.data.startswith("date_"):
         date_str = query.data.replace("date_", "")
         context.user_data['selected_date'] = date_str
-        context.user_data['booking_step'] = 'time'
         
         date_obj = datetime.fromisoformat(date_str)
         date_formatted = date_obj.strftime("%d.%m.%Y")
@@ -340,7 +333,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "• Кабельный менеджмент\n"
                 "• Дополнительные вентиляторы\n\n"
                 "Если дополнений нет, напишите 'Нет'.",
-                reply_markup=back_keyboard(),
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -353,7 +346,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"🕐 **Время:** {time_str}\n\n"
                 "📝 **Напишите ваши пожелания по сборке:**\n\n"
                 "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
-                reply_markup=back_keyboard(),
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -362,7 +355,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 # ==========================================
-# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ЗАПИСИ
+# 4. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ==========================================
 
 async def show_contact_input(update: Update, context: ContextTypes.DEFAULT_TYPE, date_formatted, weekday):
@@ -378,13 +371,13 @@ async def show_contact_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
             f"➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n"
             "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
             "Наш менеджер свяжется с вами для подтверждения.",
-            reply_markup=back_keyboard(),
+            reply_markup=main_keyboard(),
             parse_mode="Markdown"
         )
         context.user_data['waiting_for_contact'] = True
 
 # ==========================================
-# 4. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
+# 5. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
 # ==========================================
 
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -400,12 +393,12 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Теперь напишите ваш отзыв текстом.\n"
         "Если хотите — приложите фото (одно).\n\n"
         "Отправьте текст и фото (если есть) одним сообщением.",
-        reply_markup=back_keyboard(),
+        reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
 
 # ==========================================
-# 5. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА
+# 6. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА
 # ==========================================
 
 async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -427,17 +420,20 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "Опишите вашу ситуацию максимально подробно.\n"
         "Приложите фото или видео, если это поможет решить вопрос быстрее.\n\n"
         "После отправки мы свяжемся с вами в ближайшее время. ⏳",
-        reply_markup=back_keyboard(),
+        reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
 
 # ==========================================
-# 6. ПРИЁМ СООБЩЕНИЙ
+# 7. ПРИЁМ СООБЩЕНИЙ
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
+
+    if not text:
+        return
 
     # --- ВВОД БЮДЖЕТА ---
     if context.user_data.get('waiting_for_budget'):
@@ -449,7 +445,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"✅ **Бюджет сохранён:** {text}\n\n"
                 "📝 **Напишите ваши пожелания по сборке:**\n\n"
                 "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
-                reply_markup=back_keyboard(),
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -477,7 +473,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     "• Кабельный менеджмент\n"
                     "• Дополнительные вентиляторы\n\n"
                     "Если дополнений нет, напишите 'Нет'.",
-                    reply_markup=back_keyboard(),
+                    reply_markup=main_keyboard(),
                     parse_mode="Markdown"
                 )
                 return
@@ -536,6 +532,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "✅ **Ваша запись принята!**\n\n"
                 "Наш менеджер свяжется с вами для подтверждения в ближайшее время. ⏳\n\n"
                 "Вернуться в меню: /start",
+                reply_markup=main_keyboard(),
                 parse_mode="Markdown"
             )
             
@@ -607,7 +604,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==========================================
-# 7-10. ОТПРАВКИ АДМИНУ (без изменений)
+# 8. ОТПРАВКА АДМИНУ (ЗАПИСЬ)
 # ==========================================
 
 async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
@@ -660,6 +657,10 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         parse_mode="Markdown"
     )
 
+# ==========================================
+# 9. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
+# ==========================================
+
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
     rating = context.user_data.get('rating', 0)
 
@@ -699,6 +700,10 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
         parse_mode="Markdown"
     )
+
+# ==========================================
+# 10. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
+# ==========================================
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
     topic = context.user_data.get('support_topic', 'Без темы')
@@ -754,6 +759,10 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="Markdown"
     )
 
+# ==========================================
+# 11. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
+# ==========================================
+
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -795,4 +804,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 text="✅ **Опубликовано в канале**",
                 parse_mode="Markdown"
             )
-       
+        else:
+            await query.edit_message_text(
+                text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.",
+                parse_mode="Markdown"
+            )
+        return
+
+    if query.data == "reject_review":
+        await query.edit_message_caption(
+            caption="❌ **Отзыв отклонён**",
