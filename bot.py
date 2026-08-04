@@ -184,11 +184,11 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # ФИНАЛЬНАЯ ПУБЛИКАЦИЯ ПО ТВОЕМУ ДИЗАЙНУ
+            # ПУБЛИКАЦИЯ БЕЗ ЖИРНОГО ШРИФТА, С НУЖНЫМИ ЭМОДЗИ
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📖 **Новый Отзыв**\n\n"
-                     f"⭐ **Оценка:** {stars_symbols} {rating_count}\n\n"
+                text=f"📖 Новый Отзыв\n\n"
+                     f"⭐ Оценка: {stars_symbols} {rating_count}\n\n"
                      f"👤 {username}\n\n"
                      f"📝 {review_body}"
             )
