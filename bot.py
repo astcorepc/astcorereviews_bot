@@ -141,31 +141,21 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         review_body = "Текст отзыва не указан (пустое сообщение)"
     # ------------------------------------------
 
-    if query.data == "publish":
-        # Публикуем в канал
-        if CHANNEL_ID:
-            await context.bot.send_message(
-                chat_id=CHANNEL_ID,
-                text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
-            )
-            
-            await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
-            )
-        else:
-            await query.edit_message_text(
-                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
-            )
-        text = f"⭐ **Новый отзыв о нас!**\n\n{review_body if review_body else 'Текст не указан'}"
-            )
-            await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
-            )
-        else:
-            await query.edit_message_text(
-                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
-            )
-
+        if query.data == "publish":
+            # Публикуем в канал
+            if CHANNEL_ID:
+                await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=f"⭐ **Новый отзыв о нас!**\n\n{review_body if review_body else 'Текст не указан'}"
+                )
+                
+                await query.edit_message_text(
+                    text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body if review_body else 'Текст не указан'}"
+                )
+            else:
+                await query.edit_message_text(
+                    text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
+                )
     elif query.data == "reject":
         await query.edit_message_text(
             text=f"❌ **Отзыв отклонён**\n\n{review_body}"
