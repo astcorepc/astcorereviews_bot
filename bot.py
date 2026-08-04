@@ -102,66 +102,40 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # Получаем текст отзыва из сообщения (то, что отправил админ)
-    review_text = query.message.text
-       # Получаем текст сообщения, на которое нажали
-    review_text = query.message.text
-    
-    # Ищем текст отзыва (берем всё, что идет после последнего перехода на новую строку)
-    if "\n" in review_text:
-        review_body = review_text.split("\n")[-1]
-       # Получаем текст сообщения, на которое нажали
-    review_text = query.message.text
-    
-    # Пытаемся вытащить текст отзыва. Если не получается - ставим заглушку.
-    if "\n" in review_text:
-        # Берем всё, что после последнего переноса строки
-        review_body = review_text.split("\n")[-1]
+    # Получаем текст сообщения, на которое нажали (в котором лежит отзыв)
+    full_message_text = query.message.text
+
+    # Достаём только текст отзыва (он всегда после последнего переноса строки)
+    if "\n" in full_message_text:
+        review_body = full_message_text.split("\n")[-1]
     else:
-               # --- ЗАЩИТА ОТ ОШИБКИ (ВСТАВИТЬ СЮДА) ---
-        try:
-            # Пытаемся взять текст отзыва (как бы ты его ни получал)
-            review_body = context.user_data.get('review_body', '')
-            if not review_body:
-                # Если в памяти пусто, берем из текста сообщения
-                review_text = query.message.text
-                if "\n" in review_text:
-                    review_body = review_text.split("\n")[-1]
-                else:
-                    review_body = review_text
-        except:
-            review_body = "Ошибка при получении текста отзыва"
-        # --------------------------------------------
+        review_body = full_message_text
 
-        text = f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
-        review_body = review_text
-
-    # --- ЗАЩИТА ОТ ПУСТОГО ТЕКСТА (ДОБАВЛЕНО) ---
+    # Защита: если текст отзыва пустой, подставляем заглушку
     if not review_body:
         review_body = "Текст отзыва не указан (пустое сообщение)"
-    # ------------------------------------------
 
-        if query.data == "publish":
-            # Публикуем в канал
-            if CHANNEL_ID:
-                await context.bot.send_message(
-                    chat_id=CHANNEL_ID,
-                    text=f"⭐ **Новый отзыв о нас!**\n\n{review_body if review_body else 'Текст не указан'}"
-                )
-                
-                await query.edit_message_text(
-                    text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body if review_body else 'Текст не указан'}"
-                )
-            else:
-                await query.edit_message_text(
-                    text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
-                )
+    if query.data == "publish":
+        # Публикуем в канал
+        if CHANNEL_ID:
+            await context.bot.send_message(
+                chat_id=CHANNEL_ID,
+                text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
+            )
+            
+            await query.edit_message_text(
+                text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
+            )
+        else:
+            await query.edit_message_text(
+                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
+            )
+
     elif query.data == "reject":
         await query.edit_message_text(
             text=f"❌ **Отзыв отклонён**\n\n{review_body}"
         )
 
-# === Запуск ===
 # === Запуск ===
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -171,19 +145,16 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish|reject)$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    # --- ДОБАВИТЬ ОБРАБОТЧИК ОШИБОК ВНУТРЬ MAIN ---
     app.add_error_handler(error_handler)
 
     print("✅ Бот запущен и готов к работе!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 # --- САМА ФУНКЦИЯ ОБРАБОТЧИКА (вне main) ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"💥 ОШИБКА В БОТЕ: {context.error}")
     import traceback
     traceback.print_exc()
-
 
 # --- ЗАПУСК БОТА (в самом конце файла) ---
 if __name__ == "__main__":
