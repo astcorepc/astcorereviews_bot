@@ -1,6 +1,6 @@
 import os
 import logging
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
 # === НАСТРОЙКИ (переменные из Railway) ===
@@ -49,7 +49,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     if query.data == "review":
-        # Предлагаем выбрать оценку
         await query.edit_message_text(
             "⭐ **Оцените нашу работу от 1 до 5:**\n\n"
             "Выберите количество звезд:",
@@ -58,12 +57,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif query.data.startswith("star_"):
-        # Пользователь выбрал звезды
         stars = int(query.data.split("_")[1])
-        context.user_data['review_rating'] = stars  # Запоминаем оценку
-        context.user_data['waiting_for_review'] = True # Ждем текст
+        context.user_data['review_rating'] = stars
+        context.user_data['waiting_for_review'] = True
 
-        # Определяем правильное окончание слова
+        # Правильное окончание слова "звезда"
         if stars == 1:
             stars_text = "звезда"
         elif 2 <= stars <= 4:
@@ -98,15 +96,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get('waiting_for_review'):
         rating = context.user_data.get('review_rating', 5)
-        stars_symbols = "⭐" * rating # Рисуем звездочки (например: ⭐⭐⭐⭐⭐)
+        stars_symbols = "⭐" * rating
 
-        # Сохраняем данные в память
         context.user_data['pending_review'] = text
         context.user_data['review_author'] = user.id
         context.user_data['review_username'] = user.username
-        context.user_data['review_fullname'] = user.full_name
 
-        # Кнопки для админа
         keyboard = [
             [
                 InlineKeyboardButton("✅ Опубликовать", callback_data="publish"),
@@ -115,7 +110,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Отправляем админу на модерацию (с оценкой)
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=f"📩 **Новый отзыв на модерацию**\n\n"
@@ -125,20 +119,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-        # Подтверждение пользователю
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
             "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
             parse_mode="Markdown"
         )
         
-        # Сбрасываем состояния
         context.user_data['waiting_for_review'] = False
         context.user_data['pending_review'] = None
 
     else:
         await update.message.reply_text(
-            "Используйте кнопки меню или /start",
+            "Используйте кнопку /start в меню, чтобы начать.",
             reply_markup=main_keyboard()
         )
 
@@ -147,11 +139,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # Получаем текст сообщения и вытаскиваем отзыв
     full_message_text = query.message.text
     review_lines = full_message_text.split("\n")
     
-    # Ищем строку с текстом отзыва в сообщении админа
     review_body = "Текст не указан"
     for line in review_lines:
         if line.startswith("📝 Текст:"):
@@ -161,14 +151,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     if not review_body:
         review_body = "Текст не указан"
 
-    # Достаём данные из памяти
     author_username = context.user_data.get('review_username', 'Не указан')
     rating = context.user_data.get('review_rating', 5)
     stars_symbols = "⭐" * rating
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # Публикуем в канал с НОВЫМ ФОРМАТОМ
+            # Публикуем в канал в нужном тебе формате
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
                 text=f"**Новый отзыв**\n\n"
@@ -193,6 +182,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 # === Запуск ===
 def main():
     app = Application.builder().token(TOKEN).build()
+
+    # КОД ДЛЯ ПОЯВЛЕНИЯ КНОПКИ "МЕНЮ" В ТЕЛЕГРАМЕ
+    async def post_init(application):
+        await application.bot.set_my_commands([
+            BotCommand("start", "Показать главное меню")
+        ])
+    app.post_init = post_init
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support|star_\\d+)$"))
