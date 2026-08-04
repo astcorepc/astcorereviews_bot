@@ -194,6 +194,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_service'] = service
         context.user_data['selected_service_id'] = query.data
 
+        # === СБОРКА ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ ===
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Не указаны"
@@ -206,6 +207,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === СБОРКА ПОД КЛЮЧ ===
         elif query.data == "service_5":
             context.user_data['budget'] = "Не указан"
             context.user_data['wishes'] = "Не указаны"
@@ -218,6 +220,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === ОСТАЛЬНЫЕ УСЛУГИ ===
         else:
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Нет"
@@ -252,6 +255,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday = weekday_names.get(date_obj.weekday(), "")
         service_id = context.user_data.get('selected_service_id', '')
 
+        # === ДЛЯ "ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ" — ДОПОЛНЕНИЯ ===
         if service_id == "service_4" and context.user_data.get('extras') is None:
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
@@ -261,6 +265,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === ДЛЯ "ПОД КЛЮЧ" — проверяем, есть ли пожелания ===
         if service_id == "service_5" and context.user_data.get('wishes') == "Не указаны":
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
@@ -270,11 +275,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        await query.edit_message_text(
-            f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n📱 **Введите контактный телефон или @username:**",
-            reply_markup=back_keyboard(),
-            parse_mode="Markdown"
-        )
+        # === ФИНАЛЬНОЕ СООБЩЕНИЕ (с учетом типа услуги) ===
+        is_build_service = service_id in ["service_4", "service_5"]
+        
+        if is_build_service:
+            msg = (
+                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+                f"📅 **Дата:** {date_formatted} ({weekday})\n"
+                f"🕐 **Время:** {time_str}\n"
+                f"💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n"
+                f"📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n"
+                f"➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n"
+                f"📱 **Введите контактный телефон или @username:**"
+            )
+        else:
+            msg = (
+                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+                f"📅 **Дата:** {date_formatted} ({weekday})\n"
+                f"🕐 **Время:** {time_str}\n\n"
+                f"📱 **Введите контактный телефон или @username:**"
+            )
+
+        await query.edit_message_text(msg, reply_markup=back_keyboard(), parse_mode="Markdown")
         context.user_data['waiting_for_contact'] = True
         return
 
@@ -312,7 +334,7 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # ==========================================
-# 4. ПРИЁМ СООБЩЕНИЙ (ПОЛНОСТЬЮ ПЕРЕПИСАН)
+# 4. ПРИЁМ СООБЩЕНИЙ
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -417,7 +439,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 5. ОТЗЫВЫ (исправлено)
+    # 5. ОТЗЫВЫ
     # ==========================================
     if context.user_data.get('waiting_for_review'):
         # Если есть только фото, но нет текста
