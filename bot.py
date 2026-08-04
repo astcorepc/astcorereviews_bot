@@ -104,13 +104,14 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # Получаем текст отзыва из сообщения (то, что отправил админ)
     review_text = query.message.text
-    # Убираем служебный текст, оставляем только отзыв
-    if "📩 Новый отзыв на модерацию" in review_text:
-        lines = review_text.split("\n")
-        # Ищем строку с текстом отзыва (она начинается с "📝 Текст:")
-        for i, line in enumerate(lines):
-            if line.startswith("📝 Текст:"):
-                review_body = "\n".join(lines[i+1:])
+       # Получаем текст сообщения, на которое нажали
+    review_text = query.message.text
+    
+    # Ищем текст отзыва (берем всё, что идет после последнего перехода на новую строку)
+    if "\n" in review_text:
+        review_body = review_text.split("\n")[-1]
+    else:
+        review_body = review_text
                 break
 
     if query.data == "publish":
