@@ -37,10 +37,9 @@ def stars_keyboard():
 # === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
+        "💻 Добро пожаловать в AST CORE ПК!\n\n"
         "Нажмите кнопку, чтобы оставить отзыв о нашем сервисе.",
-        reply_markup=main_keyboard(),
-        parse_mode="Markdown"
+        reply_markup=main_keyboard()
     )
 
 # === Обработка кнопок (выбор звезд) ===
@@ -50,10 +49,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if query.data == "review":
         await query.edit_message_text(
-            "⭐ **Оцените нашу работу от 1 до 5:**\n\n"
+            "⭐ Оцените нашу работу от 1 до 5:\n\n"
             "Выберите количество звезд:",
-            reply_markup=stars_keyboard(),
-            parse_mode="Markdown"
+            reply_markup=stars_keyboard()
         )
 
     elif query.data.startswith("star_"):
@@ -69,23 +67,21 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             stars_text = "звезд"
 
         await query.edit_message_text(
-            f"✅ **Вы выбрали {stars} {stars_text}**\n\n"
-            "✍️ Теперь **напишите ваш отзыв** одним сообщением.\n\n"
+            f"✅ Вы выбрали {stars} {stars_text}\n\n"
+            "✍️ Теперь напишите ваш отзыв одним сообщением.\n\n"
             "Расскажите:\n"
             "• Как прошла покупка?\n"
             "• Как показал себя ПК?\n"
             "• Что понравилось / что улучшить?\n\n"
-            "Спасибо за честность! 🙏",
-            parse_mode="Markdown"
+            "Спасибо за честность! 🙏"
         )
 
     elif query.data == "support":
         await query.edit_message_text(
-            "🛠 **Поддержка и гарантия**\n\n"
+            "🛠 Поддержка и гарантия\n\n"
             "По любым вопросам пишите:\n"
             "@ваш_менеджер\n\n"
-            "Мы на связи ежедневно с 10:00 до 22:00 ⚡",
-            parse_mode="Markdown"
+            "Мы на связи ежедневно с 10:00 до 22:00 ⚡"
         )
 
 # === Приём текста и отправка админу ===
@@ -113,7 +109,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Отправляем админу
         await context.bot.send_message(
             chat_id=ADMIN_ID,
-            text=f"📩 **Новый отзыв на модерацию**\n\n"
+            text=f"📩 Новый отзыв на модерацию\n\n"
                  f"👤 @{user.username} (ID: {user.id})\n"
                  f"⭐ Оценка: {stars_symbols} ({rating}/5)\n"
                  f"📝 Текст:\n{text}",
@@ -122,9 +118,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # Ответ пользователю
         await update.message.reply_text(
-            "✅ **Спасибо за ваш отзыв!**\n\n"
-            "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
-            parse_mode="Markdown"
+            "✅ Спасибо за ваш отзыв!\n\n"
+            "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️"
         )
         
         context.user_data['waiting_for_review'] = False
@@ -184,7 +179,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # ПУБЛИКАЦИЯ БЕЗ ЖИРНОГО ШРИФТА, С НУЖНЫМИ ЭМОДЗИ
+            # ПУБЛИКАЦИЯ БЕЗ ЖИРНОГО ШРИФТА
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
                 text=f"📖 Новый Отзыв\n\n"
@@ -194,7 +189,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
             
             await query.edit_message_text(
-                text="✅ **Отзыв опубликован в канале!**"
+                text="✅ Отзыв опубликован в канале!"
             )
         else:
             await query.edit_message_text(
@@ -203,7 +198,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     elif query.data == "reject":
         await query.edit_message_text(
-            text="❌ **Отзыв отклонён**"
+            text="❌ Отзыв отклонён"
         )
 
 # === Запуск ===
