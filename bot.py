@@ -143,11 +143,20 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish|reject)$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-# ==========================================
-# ВСТАВЬ ЭТОТ КУСОК ПРЯМО СЮДА (перед if __name__):
-# ==========================================
+    # --- ДОБАВИТЬ ОБРАБОТЧИК ОШИБОК ВНУТРЬ MAIN ---
+    app.add_error_handler(error_handler)
+
+    print("✅ Бот запущен и готов к работе!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+# --- САМА ФУНКЦИЯ ОБРАБОТЧИКА (вне main) ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"💥 ОШИБКА В БОТЕ: {context.error}")
     import traceback
     traceback.print_exc()
-# ==========================================
+
+
+# --- ЗАПУСК БОТА (в самом конце файла) ---
+if __name__ == "__main__":
+    main()
