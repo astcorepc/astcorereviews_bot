@@ -63,8 +63,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['review_rating'] = stars  # Запоминаем оценку
         context.user_data['waiting_for_review'] = True # Ждем текст
 
+        # Определяем правильное окончание слова
+        if stars == 1:
+            stars_text = "звезда"
+        elif 2 <= stars <= 4:
+            stars_text = "звезды"
+        else:
+            stars_text = "звезд"
+
         await query.edit_message_text(
-            f"✅ **Вы выбрали {stars} {self._get_stars_text(stars)}**\n\n"
+            f"✅ **Вы выбрали {stars} {stars_text}**\n\n"
             "✍️ Теперь **напишите ваш отзыв** одним сообщением.\n\n"
             "Расскажите:\n"
             "• Как прошла покупка?\n"
@@ -82,12 +90,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "Мы на связи ежедневно с 10:00 до 22:00 ⚡",
             parse_mode="Markdown"
         )
-
-# Вспомогательная функция для красивого текста звезд
-def _get_stars_text(self, count):
-    if count == 1: return "звезда"
-    elif 2 <= count <= 4: return "звезды"
-    else: return "звезд"
 
 # === Приём текста (отзыв от пользователя) ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
