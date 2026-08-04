@@ -19,7 +19,7 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === Команда /start ===
+# === Команда /start (она же кнопка "Меню") ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
@@ -60,9 +60,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text
 
     if context.user_data.get('waiting_for_review'):
-        # Сохраняем отзыв в память (чтобы потом опубликовать)
+        # Сохраняем отзыв и данные автора в память
         context.user_data['pending_review'] = text
         context.user_data['review_author'] = user.id
+        context.user_data['review_username'] = user.username
+        context.user_data['review_fullname'] = user.full_name
 
         # Кнопки для админа
         keyboard = [
@@ -82,16 +84,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-        # Подтверждение пользователю
+        # Подтверждение пользователю (и добавляем кнопку "Меню", чтобы можно было вернуться)
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
             "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
+            reply_markup=main_keyboard(),  # <--- Возвращаем меню
             parse_mode="Markdown"
         )
         context.user_data['waiting_for_review'] = False
         context.user_data['pending_review'] = None
 
     else:
+        # Если пользователь пишет что-то не по делу, отправляем ему меню
         await update.message.reply_text(
             "Используйте кнопки меню или /start",
             reply_markup=main_keyboard()
@@ -102,29 +106,34 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # Получаем текст сообщения, на которое нажали (в котором лежит отзыв)
+    # Получаем текст сообщения и вытаскиваем отзыв
     full_message_text = query.message.text
-
-    # Достаём только текст отзыва (он всегда после последнего переноса строки)
     if "\n" in full_message_text:
         review_body = full_message_text.split("\n")[-1]
     else:
         review_body = full_message_text
 
-    # Защита: если текст отзыва пустой, подставляем заглушку
     if not review_body:
         review_body = "Текст отзыва не указан (пустое сообщение)"
 
     if query.data == "publish":
-        # Публикуем в канал
+        # Достаём данные автора из памяти
+        author_username = context.user_data.get('review_username', 'Не указан')
+        author_fullname = context.user_data.get('review_fullname', 'Аноним')
+
         if CHANNEL_ID:
+            # Публикуем в канал с указанием автора
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
+                text=f"⭐ **Новый отзыв о нас!**\n\n"
+                     f"👤 **От:** @{author_username} ({author_fullname})\n"
+                     f"📝 {review_body}"
             )
             
             await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
+                text=f"✅ **Отзыв опубликован в канале!**\n\n"
+                     f"👤 От: @{author_username}\n"
+                     f"📝 {review_body}"
             )
         else:
             await query.edit_message_text(
@@ -150,12 +159,12 @@ def main():
     print("✅ Бот запущен и готов к работе!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# --- САМА ФУНКЦИЯ ОБРАБОТЧИКА (вне main) ---
+# --- ОБРАБОТЧИК ОШИБОК ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"💥 ОШИБКА В БОТЕ: {context.error}")
     import traceback
     traceback.print_exc()
 
-# --- ЗАПУСК БОТА (в самом конце файла) ---
+# --- ЗАПУСК БОТА ---
 if __name__ == "__main__":
     main()
