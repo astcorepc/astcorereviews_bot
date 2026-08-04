@@ -194,7 +194,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_service'] = service
         context.user_data['selected_service_id'] = query.data
 
-        # === СБОРКА ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ ===
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Не указаны"
@@ -207,7 +206,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === СБОРКА ПОД КЛЮЧ ===
         elif query.data == "service_5":
             context.user_data['budget'] = "Не указан"
             context.user_data['wishes'] = "Не указаны"
@@ -254,7 +252,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday = weekday_names.get(date_obj.weekday(), "")
         service_id = context.user_data.get('selected_service_id', '')
 
-        # === ДЛЯ "ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ" — ДОПОЛНЕНИЯ ===
         if service_id == "service_4" and context.user_data.get('extras') is None:
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
@@ -264,7 +261,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ДЛЯ "ПОД КЛЮЧ" — проверяем, есть ли пожелания ===
         if service_id == "service_5" and context.user_data.get('wishes') == "Не указаны":
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
@@ -274,7 +270,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ВСЁ ЗАПОЛНЕНО — КОНТАКТЫ ===
         await query.edit_message_text(
             f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n📱 **Введите контактный телефон или @username:**",
             reply_markup=back_keyboard(),
@@ -317,22 +312,22 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # ==========================================
-# 4. ПРИЁМ СООБЩЕНИЙ (ПОЛНОСТЬЮ ИСПРАВЛЕН)
+# 4. ПРИЁМ СООБЩЕНИЙ (ПОЛНОСТЬЮ ПЕРЕПИСАН)
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    text = update.message.text
+    text = update.message.caption if update.message.caption else update.message.text
     photo = None
 
-    # Проверяем, есть ли фото (в любом виде)
+    # Проверяем, есть ли фото
     if update.message.photo:
         photo = update.message.photo[-1].file_id
     elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
         photo = update.message.document.file_id
 
     # ==========================================
-    # 1. ВВОД БЮДЖЕТА (только для "под ключ")
+    # 1. ВВОД БЮДЖЕТА
     # ==========================================
     if context.user_data.get('waiting_for_budget'):
         if text:
@@ -352,7 +347,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 2. ВВОД ПОЖЕЛАНИЙ (для обеих сборок)
+    # 2. ВВОД ПОЖЕЛАНИЙ
     # ==========================================
     if context.user_data.get('waiting_for_wishes'):
         if text:
@@ -382,7 +377,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     # ==========================================
-    # 3. ВВОД ДОПОЛНЕНИЙ (только для "из ваших")
+    # 3. ВВОД ДОПОЛНЕНИЙ
     # ==========================================
     if context.user_data.get('waiting_for_extras'):
         if text:
@@ -422,10 +417,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 5. ОТЗЫВЫ (с фото и текстом)
+    # 5. ОТЗЫВЫ (исправлено)
     # ==========================================
     if context.user_data.get('waiting_for_review'):
-        # Если есть только фото, но нет текста — просим текст
+        # Если есть только фото, но нет текста
         if photo and not text:
             await update.message.reply_text(
                 "📝 **Пожалуйста, напишите текст отзыва.**",
@@ -433,7 +428,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Если нет ни текста, ни фото — игнорируем
+        # Если нет ни текста, ни фото
         if not text and not photo:
             await update.message.reply_text(
                 "Пожалуйста, напишите текст отзыва или приложите фото.",
@@ -455,7 +450,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 6. ТИКЕТЫ (с фото и текстом)
+    # 6. ТИКЕТЫ
     # ==========================================
     if context.user_data.get('waiting_for_support'):
         file_id = None
@@ -483,7 +478,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 7. НЕ В РЕЖИМЕ — ПОКАЗЫВАЕМ МЕНЮ
+    # 7. НЕ В РЕЖИМЕ
     # ==========================================
     await update.message.reply_text(
         "Используйте кнопки меню или /start",
