@@ -164,14 +164,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             parts = line.split(":")[1].strip().split()
             if parts:
                 stars_symbols = parts[0] # забираем звезды
-                # Ищем дробь (например (5/5))
                 for part in parts:
                     if part.startswith("(") and part.endswith(")"):
                         rating_count = part
                         break
             break
     
-    # Если дробь не найдена, берем из количества звезд (на всякий случай)
     if rating_count == 5 and stars_symbols:
         rating_count = f"({len(stars_symbols)}/5)"
 
@@ -186,13 +184,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # ФИНАЛЬНАЯ КРАСИВАЯ ПУБЛИКАЦИЯ (звезды + дробь в скобках)
+            # ФИНАЛЬНАЯ ПУБЛИКАЦИЯ ПО ТВОЕМУ ДИЗАЙНУ
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"**Новый Отзыв**\n\n"
-                     f"{stars_symbols} {rating_count}\n\n"
-                     f"{username}\n\n"
-                     f"{review_body}"
+                text=f"📖 **Новый Отзыв**\n\n"
+                     f"⭐ **Оценка:** {stars_symbols} {rating_count}\n\n"
+                     f"👤 {username}\n\n"
+                     f"📝 {review_body}"
             )
             
             await query.edit_message_text(
