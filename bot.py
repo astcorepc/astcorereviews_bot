@@ -140,56 +140,57 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # ДОСТАЕМ ДАННЫЕ ИЗ ТЕКСТА СООБЩЕНИЯ АДМИНА (это самый надежный способ)
+    # Парсим сообщение админа
     full_text = query.message.text
-    
-    # Ищем строки в сообщении админа
     lines = full_text.split("\n")
     
-    # 1. Достаём юзера
+    # Ищем юзера
     username_line = ""
     for line in lines:
         if line.startswith("👤"):
             username_line = line
             break
     
-    # Парсим юзера из строки (например: "👤 @astcorepc01 (ID: 123)")
-    username = "Не указан"
+    username = "Пользователь"
     if "@" in username_line:
-        # Берем всё от @ до пробела
         username = username_line.split("@")[1].split()[0]
         username = f"@{username}"
-    elif "ID:" in username_line:
-        # Если есть ID, но нет @, пишем просто "Пользователь"
-        username = "Пользователь"
-
-    # 2. Достаём оценку
+    
+    # Ищем оценку (звезды и дробь)
     stars_symbols = ""
+    rating_count = 5 # по умолчанию
     for line in lines:
         if line.startswith("⭐ Оценка:"):
-            # Берем только звезды
-            stars_part = line.split(":")[1].strip()
-            stars_symbols = stars_part.split()[0] # берем первые символы (звезды)
+            parts = line.split(":")[1].strip().split()
+            if parts:
+                stars_symbols = parts[0] # забираем звезды
+                # Ищем дробь (например (5/5))
+                for part in parts:
+                    if part.startswith("(") and part.endswith(")"):
+                        rating_count = part
+                        break
             break
     
-    # 3. Достаём текст отзыва (он всегда идет после строки "📝 Текст:")
+    # Если дробь не найдена, берем из количества звезд (на всякий случай)
+    if rating_count == 5 and stars_symbols:
+        rating_count = f"({len(stars_symbols)}/5)"
+
+    # Ищем текст отзыва
     review_body = "Текст не указан"
     for i, line in enumerate(lines):
         if line.startswith("📝 Текст:"):
-            # Всё, что идет после двоеточия в этой строке, плюс все следующие строки
             review_body = line.replace("📝 Текст:", "").strip()
-            # Если есть следующие строки, добавляем их (маловероятно, но на всякий случай)
             if i + 1 < len(lines):
                 review_body += "\n" + "\n".join(lines[i+1:])
             break
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # КРАСИВАЯ ПУБЛИКАЦИЯ В КАНАЛ
+            # ФИНАЛЬНАЯ КРАСИВАЯ ПУБЛИКАЦИЯ (звезды + дробь в скобках)
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
                 text=f"**Новый Отзыв**\n\n"
-                     f"{stars_symbols}\n\n"
+                     f"{stars_symbols} {rating_count}\n\n"
                      f"{username}\n\n"
                      f"{review_body}"
             )
