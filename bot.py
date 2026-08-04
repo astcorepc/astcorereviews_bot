@@ -45,6 +45,12 @@ def support_topics_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def back_keyboard():
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_services")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 def services_keyboard():
     keyboard = [
         [InlineKeyboardButton("🧹 Чистка ПК от пыли - 1 000 ₽", callback_data="service_1")],
@@ -189,7 +195,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
-                reply_markup=main_keyboard(),
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -198,7 +204,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['waiting_for_budget'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n💰 **Какой бюджет?**\n\nНапишите сумму в рублях (например: 80 000 ₽)",
-                reply_markup=main_keyboard(),
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -241,7 +247,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n\n➕ **Дополнения за доп. плату:**\nНапишите, что хотите добавить (или 'Нет'):",
-                reply_markup=main_keyboard(),
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -250,14 +256,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
-                reply_markup=main_keyboard(),
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
 
         await query.edit_message_text(
             f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n📱 **Введите контактный телефон или @username:**",
-            reply_markup=main_keyboard(),
+            reply_markup=back_keyboard(),
             parse_mode="Markdown"
         )
         context.user_data['waiting_for_contact'] = True
@@ -275,7 +281,7 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['waiting_for_review'] = True
     await query.edit_message_text(
         f"📝 **Вы выбрали {rating} ⭐**\n\nНапишите текст отзыва.\nМожно приложить фото.",
-        reply_markup=main_keyboard(),
+        reply_markup=back_keyboard(),
         parse_mode="Markdown"
     )
 
@@ -292,7 +298,7 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
     context.user_data['waiting_for_support'] = True
     await query.edit_message_text(
         f"📩 **Тема:** {topic}\n\nОпишите ситуацию подробно. Можно приложить фото/видео.",
-        reply_markup=main_keyboard(),
+        reply_markup=back_keyboard(),
         parse_mode="Markdown"
     )
 
@@ -311,8 +317,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_for_budget'] = False
         context.user_data['waiting_for_wishes'] = True
         await update.message.reply_text(
-            f"✅ **Бюджет:** {text}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
-            reply_markup=main_keyboard(),
+            f"✅ **Бюджет сохранён:** {text}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
+            reply_markup=back_keyboard(),
             parse_mode="Markdown"
         )
         return
@@ -323,13 +329,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if context.user_data.get('selected_service_id') == "service_5":
             context.user_data['waiting_for_extras'] = True
             await update.message.reply_text(
-                f"✅ **Пожелания:**\n{text}\n\n➕ **Дополнения за доп. плату:**\nНапишите, что хотите добавить (или 'Нет'):",
-                reply_markup=main_keyboard(),
+                f"✅ **Пожелания сохранены:**\n{text}\n\n➕ **Дополнения за доп. плату:**\nНапишите, что хотите добавить (или 'Нет'):",
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
         else:
             await update.message.reply_text(
-                f"✅ **Пожелания:**\n{text}\n\n📅 **Выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
+                f"✅ **Пожелания сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
                 reply_markup=date_keyboard(),
                 parse_mode="Markdown"
             )
@@ -339,7 +345,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['extras'] = text
         context.user_data['waiting_for_extras'] = False
         await update.message.reply_text(
-            f"✅ **Дополнения:**\n{text}\n\n📅 **Выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
+            f"✅ **Дополнения сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
             reply_markup=date_keyboard(),
             parse_mode="Markdown"
         )
