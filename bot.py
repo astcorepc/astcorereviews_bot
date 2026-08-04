@@ -703,4 +703,4 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # === ОТЗЫВЫ — ОТКАЗАТЬ ===
     if query.data == "review_reject":
-        user_id = context.user
+        context.user_data['waiting_for_re
