@@ -162,6 +162,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if query.data == "back_to_services":
+        context.user_data['waiting_for_contact'] = False
+        context.user_data['waiting_for_budget'] = False
+        context.user_data['waiting_for_wishes'] = False
+        context.user_data['waiting_for_extras'] = False
         await query.edit_message_text("💵 **Выберите услугу:**", reply_markup=services_keyboard(), parse_mode="Markdown")
         return
 
