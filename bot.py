@@ -118,7 +118,22 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         # Берем всё, что после последнего переноса строки
         review_body = review_text.split("\n")[-1]
     else:
-        # Если переноса строки нет, берем весь текст
+               # --- ЗАЩИТА ОТ ОШИБКИ (ВСТАВИТЬ СЮДА) ---
+        try:
+            # Пытаемся взять текст отзыва (как бы ты его ни получал)
+            review_body = context.user_data.get('review_body', '')
+            if not review_body:
+                # Если в памяти пусто, берем из текста сообщения
+                review_text = query.message.text
+                if "\n" in review_text:
+                    review_body = review_text.split("\n")[-1]
+                else:
+                    review_body = review_text
+        except:
+            review_body = "Ошибка при получении текста отзыва"
+        # --------------------------------------------
+
+        text = f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
         review_body = review_text
 
     # --- ЗАЩИТА ОТ ПУСТОГО ТЕКСТА (ДОБАВЛЕНО) ---
