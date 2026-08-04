@@ -74,22 +74,13 @@ def get_working_days():
     today = datetime.now().date()
     working_days = []
     
-    # Идём вперёд на 21 день, чтобы найти все ПН, СР, ПТ
     for i in range(21):
         check_date = today + timedelta(days=i)
-        weekday = check_date.weekday()  # 0=ПН, 1=ВТ, 2=СР, 3=ЧТ, 4=ПТ
+        weekday = check_date.weekday()
         
-        if weekday in [0, 2, 4]:  # ПН, СР, ПТ
-            day_names = {
-                0: "ПН",
-                2: "СР", 
-                4: "ПТ"
-            }
-            day_schedule = {
-                0: "11:00 – 17:00",
-                2: "12:00 – 18:00",
-                4: "11:00 – 17:00"
-            }
+        if weekday in [0, 2, 4]:
+            day_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+            day_schedule = {0: "11:00 – 17:00", 2: "12:00 – 18:00", 4: "11:00 – 17:00"}
             date_str = check_date.strftime("%d.%m")
             working_days.append((
                 check_date.isoformat(), 
@@ -97,19 +88,16 @@ def get_working_days():
                 day_schedule[weekday]
             ))
     
-    return working_days[:6]  # Берём первые 6 доступных дней
+    return working_days[:6]
 
 def date_keyboard():
     """Выбор даты (только ПН, СР, ПТ) с указанием времени работы"""
     working_days = get_working_days()
     keyboard = []
     
-    for i, (date_iso, display, schedule) in enumerate(working_days):
+    for date_iso, display, schedule in working_days:
         keyboard.append([
-            InlineKeyboardButton(
-                f"📅 {display} ({schedule})", 
-                callback_data=f"date_{date_iso}"
-            )
+            InlineKeyboardButton(f"📅 {display} ({schedule})", callback_data=f"date_{date_iso}")
         ])
     
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_services")])
@@ -120,12 +108,7 @@ def get_time_slots_for_day(date_iso):
     date_obj = datetime.fromisoformat(date_iso)
     weekday = date_obj.weekday()
     
-    # Расписание по дням
-    schedule = {
-        0: {"start": 11, "end": 17},  # ПН
-        2: {"start": 12, "end": 18},  # СР
-        4: {"start": 11, "end": 17}   # ПТ
-    }
+    schedule = {0: {"start": 11, "end": 17}, 2: {"start": 12, "end": 18}, 4: {"start": 11, "end": 17}}
     
     if weekday not in schedule:
         return []
@@ -253,18 +236,35 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         }
         service = services_map.get(query.data, "Неизвестная услуга")
         context.user_data['selected_service'] = service
-        context.user_data['booking_step'] = 'date'
+        context.user_data['selected_service_id'] = query.data
+        context.user_data['booking_step'] = 'service_selected'
         
-        await query.edit_message_text(
-            f"✅ **Выбрана услуга:**\n{service}\n\n"
-            "📅 **Теперь выберите дату:**\n\n"
-            "Рабочие дни:\n"
-            "ПН: 11:00 – 17:00\n"
-            "СР: 12:00 – 18:00\n"
-            "ПТ: 11:00 – 17:00",
-            reply_markup=date_keyboard(),
-            parse_mode="Markdown"
-        )
+        # Проверяем, нужен ли бюджет (для сборок ПК)
+        if query.data in ["service_4", "service_5"]:
+            context.user_data['waiting_for_budget'] = True
+            await query.edit_message_text(
+                f"✅ **Выбрана услуга:**\n{service}\n\n"
+                "💰 **Какой у вас бюджет на сборку?**\n\n"
+                "Напишите сумму в рублях (например: 80 000 ₽)\n\n"
+                "⬅️ Если хотите вернуться к выбору услуги, нажмите кнопку назад.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            # Для остальных услуг сразу переходим к выбору даты
+            context.user_data['budget'] = "Не требуется"
+            context.user_data['wishes'] = "Нет"
+            context.user_data['booking_step'] = 'date'
+            await query.edit_message_text(
+                f"✅ **Выбрана услуга:**\n{service}\n\n"
+                "📅 **Теперь выберите дату:**\n\n"
+                "Рабочие дни:\n"
+                "ПН: 11:00 – 17:00\n"
+                "СР: 12:00 – 18:00\n"
+                "ПТ: 11:00 – 17:00",
+                reply_markup=date_keyboard(),
+                parse_mode="Markdown"
+            )
         return
 
     # --- ОБРАБОТКА ВЫБОРА ДАТЫ ---
@@ -298,19 +298,49 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
         weekday = weekday_names.get(date_obj.weekday(), "")
         
-        await query.edit_message_text(
-            f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
-            f"📅 **Дата:** {date_formatted} ({weekday})\n"
-            f"🕐 **Время:** {time_str}\n\n"
-            "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
-            "Наш менеджер свяжется с вами для подтверждения.",
-            parse_mode="Markdown"
-        )
-        context.user_data['waiting_for_contact'] = True
+        # Если это сборка ПК, сначала запрашиваем пожелания
+        service_id = context.user_data.get('selected_service_id', '')
+        if service_id in ["service_4", "service_5"] and not context.user_data.get('wishes'):
+            context.user_data['waiting_for_wishes'] = True
+            await query.edit_message_text(
+                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+                f"📅 **Дата:** {date_formatted} ({weekday})\n"
+                f"🕐 **Время:** {time_str}\n"
+                f"💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n\n"
+                "📝 **Напишите ваши пожелания по сборке:**\n\n"
+                "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Если пожелания уже есть или услуга не требует бюджета
+        await show_contact_input(update, context, date_formatted, weekday)
         return
 
 # ==========================================
-# 3. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
+# 3. ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ДЛЯ ЗАПИСИ
+# ==========================================
+
+async def show_contact_input(update: Update, context: ContextTypes.DEFAULT_TYPE, date_formatted, weekday):
+    """Показывает экран ввода контактов"""
+    query = update.callback_query
+    if query:
+        await query.edit_message_text(
+            f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+            f"📅 **Дата:** {date_formatted} ({weekday})\n"
+            f"🕐 **Время:** {context.user_data.get('selected_time')}\n"
+            f"💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n"
+            f"📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n\n"
+            "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
+            "Наш менеджер свяжется с вами для подтверждения.",
+            reply_markup=back_keyboard(),
+            parse_mode="Markdown"
+        )
+        context.user_data['waiting_for_contact'] = True
+
+# ==========================================
+# 4. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
 # ==========================================
 
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -331,7 +361,7 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==========================================
-# 4. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА
+# 5. ОБРАБОТКА ВЫБОРА ТЕМЫ ТИКЕТА
 # ==========================================
 
 async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -358,38 +388,90 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # ==========================================
-# 5. ПРИЁМ СООБЩЕНИЙ
+# 6. ПРИЁМ СООБЩЕНИЙ
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
+    text = update.message.text
+
+    # --- ВВОД БЮДЖЕТА ---
+    if context.user_data.get('waiting_for_budget'):
+        if text:
+            context.user_data['budget'] = text
+            context.user_data['waiting_for_budget'] = False
+            context.user_data['booking_step'] = 'date'
+            
+            # Переходим к выбору даты
+            await update.message.reply_text(
+                f"✅ **Бюджет сохранён:** {text}\n\n"
+                "📅 **Теперь выберите дату:**\n\n"
+                "Рабочие дни:\n"
+                "ПН: 11:00 – 17:00\n"
+                "СР: 12:00 – 18:00\n"
+                "ПТ: 11:00 – 17:00",
+                reply_markup=date_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        else:
+            await update.message.reply_text(
+                "💰 **Пожалуйста, напишите ваш бюджет в рублях.**",
+                parse_mode="Markdown"
+            )
+            return
+
+    # --- ВВОД ПОЖЕЛАНИЙ ---
+    if context.user_data.get('waiting_for_wishes'):
+        if text:
+            context.user_data['wishes'] = text
+            context.user_data['waiting_for_wishes'] = False
+            
+            date_obj = datetime.fromisoformat(context.user_data.get('selected_date'))
+            date_formatted = date_obj.strftime("%d.%m.%Y")
+            weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+            weekday = weekday_names.get(date_obj.weekday(), "")
+            
+            await update.message.reply_text(
+                f"✅ **Пожелания сохранены:**\n{text}\n\n"
+                "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
+                "Наш менеджер свяжется с вами для подтверждения.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+            context.user_data['waiting_for_contact'] = True
+            return
+        else:
+            await update.message.reply_text(
+                "📝 **Пожалуйста, напишите ваши пожелания по сборке.**",
+                parse_mode="Markdown"
+            )
+            return
 
     # --- РЕЖИМ ЗАПИСИ (ввод контактов) ---
     if context.user_data.get('waiting_for_contact'):
-        contact = update.message.text
-        if not contact:
+        if text:
+            context.user_data['contact'] = text
+            context.user_data['waiting_for_contact'] = False
+            
+            await send_booking_to_admin(update, context, user)
+            
+            await update.message.reply_text(
+                "✅ **Ваша запись принята!**\n\n"
+                "Наш менеджер свяжется с вами для подтверждения в ближайшее время. ⏳\n\n"
+                "Вернуться в меню: /start",
+                parse_mode="Markdown"
+            )
+            return
+        else:
             await update.message.reply_text(
                 "📱 **Пожалуйста, введите ваш контактный телефон или Telegram @username:**",
                 parse_mode="Markdown"
             )
             return
 
-        context.user_data['contact'] = contact
-        context.user_data['waiting_for_contact'] = False
-        
-        await send_booking_to_admin(update, context, user)
-        
-        await update.message.reply_text(
-            "✅ **Ваша запись принята!**\n\n"
-            "Наш менеджер свяжется с вами для подтверждения в ближайшее время. ⏳\n\n"
-            "Вернуться в меню: /start",
-            parse_mode="Markdown"
-        )
-        return
-
     # --- РЕЖИМ ОТЗЫВА ---
     if context.user_data.get('waiting_for_review'):
-        text = update.message.caption if update.message.caption else update.message.text
         photo = None
         if update.message.photo:
             photo = update.message.photo[-1].file_id
@@ -416,7 +498,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- РЕЖИМ ТИКЕТА ---
     if context.user_data.get('waiting_for_support'):
-        text = update.message.caption if update.message.caption else update.message.text
         file_id = None
         file_type = None
         if update.message.photo:
@@ -446,7 +527,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==========================================
-# 6. ОТПРАВКА АДМИНУ (ЗАПИСЬ)
+# 7. ОТПРАВКА АДМИНУ (ЗАПИСЬ)
 # ==========================================
 
 async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
@@ -455,6 +536,8 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     date_str = context.user_data.get('selected_date', 'Не выбрана')
     time_str = context.user_data.get('selected_time', 'Не выбрано')
     contact = context.user_data.get('contact', 'Не указан')
+    budget = context.user_data.get('budget', 'Не указан')
+    wishes = context.user_data.get('wishes', 'Нет')
 
     try:
         date_obj = datetime.fromisoformat(date_str)
@@ -479,8 +562,14 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         f"📱 Контакт: {contact}\n"
         f"🛠 Услуга:\n{service}\n"
         f"📅 Дата: {date_display}\n"
-        f"🕐 Время: {time_str}"
+        f"🕐 Время: {time_str}\n"
     )
+    
+    # Добавляем бюджет и пожелания, если они есть
+    if budget and budget != "Не требуется":
+        caption += f"💰 Бюджет: {budget}\n"
+    if wishes and wishes != "Нет":
+        caption += f"📝 Пожелания:\n{wishes}"
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
@@ -490,7 +579,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # ==========================================
-# 7. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
+# 8. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
 # ==========================================
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
@@ -534,7 +623,7 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 8. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
+# 9. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
 # ==========================================
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
@@ -592,7 +681,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 9. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
+# 10. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -677,7 +766,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
 # ==========================================
-# 10. ЗАПУСК
+# 11. ЗАПУСК
 # ==========================================
 
 def main():
@@ -690,7 +779,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
 
-    print("✅ Бот запущен (отзывы + тикеты + запись на услуги)!")
+    print("✅ Бот запущен (отзывы + тикеты + запись на услуги + бюджет/пожелания для сборки)!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
