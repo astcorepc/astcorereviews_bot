@@ -88,7 +88,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# === Приём текста (отзыв от пользователя) ===
+# === Приём текста ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
@@ -97,7 +97,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rating = context.user_data.get('review_rating', 5)
         stars_symbols = "⭐" * rating
 
-        # Запоминаем всё, что нужно для публикации
+        # ЗАПОМИНАЕМ ТЕКСТ В ПАМЯТЬ НАВСЕГДА
         context.user_data['pending_review'] = text
         context.user_data['review_author'] = user.id
         context.user_data['review_username'] = user.username
@@ -127,7 +127,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         context.user_data['waiting_for_review'] = False
-        context.user_data['pending_review'] = None
 
     else:
         await update.message.reply_text(
@@ -140,34 +139,31 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # Достаем из памяти данные (юзернейм, оценку)
-    author_username = context.user_data.get('review_username', 'Не указан')
+    # БЕРЕМ ДАННЫЕ ПРЯМО ИЗ ПАМЯТИ (не парсим сообщение)
+    author_username = context.user_data.get('review_username', None)
+    author_fullname = context.user_data.get('review_fullname', 'Не указан')
+    review_body = context.user_data.get('pending_review', 'Текст не указан')
     rating = context.user_data.get('review_rating', 5)
     stars_symbols = "⭐" * rating
-    
-    # Парсим текст отзыва из сообщения админа
-    full_message_text = query.message.text
-    review_lines = full_message_text.split("\n")
-    
-    review_body = "📝 Текст не указан"
-    for line in review_lines:
-        if line.startswith("📝 Текст:"):
-            review_body = line.replace("📝 Текст:", "").strip()
-            break
+
+    # ЕСЛИ НЕТ НИКА, СТАВИМ ПОЛНОЕ ИМЯ
+    if author_username:
+        display_name = f"@{author_username}"
+    else:
+        display_name = author_fullname
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # КРАСИВЫЙ ПОСТ В КАНАЛ (эмодзи, юзер, звезды, текст)
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📢 **Новый отзыв** ⭐\n\n"
-                     f"👤 @{author_username}\n"
+                text=f"📢 Новый отзыв ⭐\n\n"
+                     f"👤 {display_name}\n"
                      f"{stars_symbols}\n\n"
                      f"{review_body}"
             )
             
             await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n👤 @{author_username}"
+                text=f"✅ **Отзыв опубликован в канале!**"
             )
         else:
             await query.edit_message_text(
@@ -176,14 +172,14 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     elif query.data == "reject":
         await query.edit_message_text(
-            text=f"❌ **Отзыв отклонён**\n\n{review_body}"
+            text=f"❌ **Отзыв отклонён**"
         )
 
 # === Запуск ===
 def main():
     app = Application.builder().token(TOKEN).build()
 
-    # Кнопка "Меню" в Telegram
+    # Кнопка "Меню"
     async def post_init(application):
         await application.bot.set_my_commands([
             BotCommand("start", "Показать главное меню")
