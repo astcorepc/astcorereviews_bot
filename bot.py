@@ -341,10 +341,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.caption if update.message.caption else update.message.text
     photo = None
+    video = None
 
-    # Проверяем, есть ли фото
+    # Проверяем, есть ли фото или видео
     if update.message.photo:
         photo = update.message.photo[-1].file_id
+    elif update.message.video:
+        video = update.message.video.file_id
     elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
         photo = update.message.document.file_id
 
@@ -442,7 +445,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # 5. ОТЗЫВЫ
     # ==========================================
     if context.user_data.get('waiting_for_review'):
-        # Если есть только фото, но нет текста
         if photo and not text:
             await update.message.reply_text(
                 "📝 **Пожалуйста, напишите текст отзыва.**",
@@ -450,7 +452,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Если нет ни текста, ни фото
         if not text and not photo:
             await update.message.reply_text(
                 "Пожалуйста, напишите текст отзыва или приложите фото.",
@@ -458,10 +459,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Отправляем отзыв админу
         await send_review_to_admin(update, context, user, text or "Без текста", photo)
         
-        # Сбрасываем состояние
         context.user_data['waiting_for_review'] = False
         clear_user_data(context)
         
@@ -472,7 +471,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 6. ТИКЕТЫ
+    # 6. ТИКЕТЫ (с поддержкой видео)
     # ==========================================
     if context.user_data.get('waiting_for_support'):
         file_id = None
@@ -480,12 +479,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if update.message.photo:
             file_id = update.message.photo[-1].file_id
             file_type = "photo"
-        elif update.message.document:
-            file_id = update.message.document.file_id
-            file_type = "document"
         elif update.message.video:
             file_id = update.message.video.file_id
             file_type = "video"
+        elif update.message.document:
+            file_id = update.message.document.file_id
+            file_type = "document"
 
         if not text and not file_id:
             await update.message.reply_text(
@@ -554,18 +553,23 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     keyboard = [[InlineKeyboardButton("✅ Принято", callback_data="ticket_accepted"), InlineKeyboardButton("❌ Закрыть", callback_data="ticket_closed")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     caption = f"🎫 **Новый тикет**\n\n👤 @{user.username} (ID: {user.id})\n📂 Тема: {topic}\n📝 {text}"
+    
     if file_id and file_type == "photo":
         await context.bot.send_photo(chat_id=ADMIN_ID, photo=file_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
-    elif file_id and file_type == "document":
-        await context.bot.send_document(chat_id=ADMIN_ID, document=file_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
     elif file_id and file_type == "video":
         await context.bot.send_video(chat_id=ADMIN_ID, video=file_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
+    elif file_id and file_type == "document":
+        await context.bot.send_document(chat_id=ADMIN_ID, document=file_id, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
     else:
         await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
-    await update.message.reply_text("✅ **Обращение принято!**\n\nСпециалист свяжется с вами. ⏳", parse_mode="Markdown")
+    
+    await update.message.reply_text(
+        "✅ **Обращение принято!**\n\nСпециалист свяжется с вами. ⏳",
+        parse_mode="Markdown"
+    )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА
+# 6. ОБРАБОТЧИК АДМИНА (исправлен для видео)
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -573,36 +577,76 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     msg = query.message
     photo = None
+    video = None
+    document = None
+    
+    # Проверяем, что пришло
     if msg.photo:
         photo = msg.photo[-1].file_id
+    elif msg.video:
+        video = msg.video.file_id
     elif msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/'):
         photo = msg.document.file_id
+    elif msg.document:
+        document = msg.document.file_id
+    
     caption = msg.caption if msg.caption else msg.text
 
+    # --- ЗАПИСЬ ---
     if query.data == "booking_confirm":
         await query.edit_message_text(text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\n{caption}", parse_mode="Markdown")
         return
     if query.data == "booking_cancel":
         await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}", parse_mode="Markdown")
         return
+
+    # --- ОТЗЫВЫ ---
     if query.data == "publish_review":
         if CHANNEL_ID:
             if photo:
                 await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
             else:
                 await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
-            await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown") if photo else await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
+            if photo:
+                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
+            else:
+                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
         else:
             await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
         return
+
     if query.data == "reject_review":
-        await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown") if photo else await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
+        if photo:
+            await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
+        else:
+            await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
         return
+
+    # --- ТИКЕТЫ (исправлено: теперь работает с видео) ---
     if query.data == "ticket_accepted":
-        await query.edit_message_caption(caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.", parse_mode="Markdown") if photo else await query.edit_message_text(text="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.", parse_mode="Markdown")
+        if photo or video or document:
+            await query.edit_message_caption(
+                caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                text="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
+                parse_mode="Markdown"
+            )
         return
+
     if query.data == "ticket_closed":
-        await query.edit_message_caption(caption="❌ **Тикет закрыт**", parse_mode="Markdown") if photo else await query.edit_message_text(text="❌ **Тикет закрыт**", parse_mode="Markdown")
+        if photo or video or document:
+            await query.edit_message_caption(
+                caption="❌ **Тикет закрыт**",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                text="❌ **Тикет закрыт**",
+                parse_mode="Markdown"
+            )
         return
 
 # ==========================================
@@ -616,7 +660,7 @@ def main():
     app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel)$"))
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, handle_message))
     print("✅ Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
