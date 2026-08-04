@@ -144,9 +144,6 @@ def main():
 
     print("✅ Бот запущен и готов к работе!")
     import logging
-logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
 )
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
