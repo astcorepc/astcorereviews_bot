@@ -5,8 +5,8 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 # === НАСТРОЙКИ (переменные из Railway) ===
 TOKEN = os.getenv("BOT_TOKEN")
-ADMIN_ID = int(os.getenv("ADMIN_ID"))           # твой ID
-CHANNEL_ID = os.getenv("CHANNEL_ID")            # ID канала (например -1001234567890)
+ADMIN_ID = int(os.getenv("ADMIN_ID"))
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 logging.basicConfig(level=logging.INFO)
 
@@ -43,7 +43,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === Обработка кнопок (главное меню и звезды) ===
+# === Обработка кнопок ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -61,7 +61,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['review_rating'] = stars
         context.user_data['waiting_for_review'] = True
 
-        # Правильное окончание слова "звезда"
         if stars == 1:
             stars_text = "звезда"
         elif 2 <= stars <= 4:
@@ -98,9 +97,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rating = context.user_data.get('review_rating', 5)
         stars_symbols = "⭐" * rating
 
+        # Запоминаем всё, что нужно для публикации
         context.user_data['pending_review'] = text
         context.user_data['review_author'] = user.id
         context.user_data['review_username'] = user.username
+        context.user_data['review_fullname'] = user.full_name
 
         keyboard = [
             [
@@ -134,33 +135,32 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
-# === Обработка действий админа (публикация / отклонение) ===
+# === Обработка действий админа ===
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    # Достаем из памяти данные (юзернейм, оценку)
+    author_username = context.user_data.get('review_username', 'Не указан')
+    rating = context.user_data.get('review_rating', 5)
+    stars_symbols = "⭐" * rating
+    
+    # Парсим текст отзыва из сообщения админа
     full_message_text = query.message.text
     review_lines = full_message_text.split("\n")
     
-    review_body = "Текст не указан"
+    review_body = "📝 Текст не указан"
     for line in review_lines:
         if line.startswith("📝 Текст:"):
             review_body = line.replace("📝 Текст:", "").strip()
             break
-            
-    if not review_body:
-        review_body = "Текст не указан"
-
-    author_username = context.user_data.get('review_username', 'Не указан')
-    rating = context.user_data.get('review_rating', 5)
-    stars_symbols = "⭐" * rating
 
     if query.data == "publish":
         if CHANNEL_ID:
-            # Публикуем в канал в нужном тебе формате
+            # КРАСИВЫЙ ПОСТ В КАНАЛ (эмодзи, юзер, звезды, текст)
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"**Новый отзыв**\n\n"
+                text=f"📢 **Новый отзыв** ⭐\n\n"
                      f"👤 @{author_username}\n"
                      f"{stars_symbols}\n\n"
                      f"{review_body}"
@@ -183,7 +183,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 def main():
     app = Application.builder().token(TOKEN).build()
 
-    # КОД ДЛЯ ПОЯВЛЕНИЯ КНОПКИ "МЕНЮ" В ТЕЛЕГРАМЕ
+    # Кнопка "Меню" в Telegram
     async def post_init(application):
         await application.bot.set_my_commands([
             BotCommand("start", "Показать главное меню")
@@ -200,12 +200,10 @@ def main():
     print("✅ Бот запущен и готов к работе!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
-# --- ОБРАБОТЧИК ОШИБОК ---
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(f"💥 ОШИБКА В БОТЕ: {context.error}")
     import traceback
     traceback.print_exc()
 
-# --- ЗАПУСК БОТА ---
 if __name__ == "__main__":
     main()
