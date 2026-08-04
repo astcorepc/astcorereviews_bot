@@ -19,7 +19,7 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === КНОПКИ ОЦЕНКИ (цифра + звезда) ===
+# === КНОПКИ ОЦЕНКИ (3 ⭐, 4 ⭐, 5 ⭐) ===
 def rating_keyboard():
     keyboard = [
         [
@@ -69,6 +69,7 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['rating'] = rating
     context.user_data['waiting_for_review'] = True
 
+    # ВАЖНО: пишем "Вы выбрали 3 ⭐" (цифра + одна звезда)
     await query.edit_message_text(
         f"📝 **Вы выбрали {rating} ⭐**\n\n"
         "Теперь напишите ваш отзыв текстом.\n"
@@ -77,7 +78,7 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === ПРИЁМ СООБЩЕНИЙ ===
+# === ПРИЁМ СООБЩЕНИЙ (ТЕКСТ + ФОТО) ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
@@ -129,6 +130,7 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
+    # ВАЖНО: админу тоже приходит "3 ⭐" (цифра + одна звезда)
     caption = (
         f"📩 **Новый отзыв**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
@@ -175,7 +177,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=caption
                 )
 
-            # Меняем текст у админа, НЕ отправляем новое сообщение
             if msg.photo:
                 await query.edit_message_caption(
                     caption="✅ **Опубликовано в канале**",
