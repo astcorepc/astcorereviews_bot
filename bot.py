@@ -77,8 +77,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
     if context.user_data.get('waiting_for_review'):
+        # Проверяем, есть ли текст
         text = update.message.text
-        photo = update.message.photo[-1].file_id if update.message.photo else None
+        
+        # Проверяем, есть ли фото (в любом виде)
+        photo = None
+        if update.message.photo:
+            photo = update.message.photo[-1].file_id
+        elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
+            # Если фото отправлено как файл
+            photo = update.message.document.file_id
 
         # Если есть только фото, а текста нет — просим текст
         if photo and not text:
@@ -154,7 +162,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
 
     msg = query.message
-    photo = msg.photo[-1].file_id if msg.photo else None
+    photo = None
+    if msg.photo:
+        photo = msg.photo[-1].file_id
+    elif msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/'):
+        photo = msg.document.file_id
+    
     caption = msg.caption if msg.caption else msg.text
 
     if query.data == "publish":
@@ -171,7 +184,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=caption
                 )
 
-            if msg.photo:
+            if msg.photo or (msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/')):
                 await query.edit_message_caption(
                     caption="✅ **Опубликовано в канале**",
                     parse_mode="Markdown"
@@ -188,7 +201,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
 
     elif query.data == "reject":
-        if msg.photo:
+        if msg.photo or (msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/')):
             await query.edit_message_caption(
                 caption="❌ **Отклонено**",
                 parse_mode="Markdown"
@@ -206,7 +219,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support)$"))
     app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish|reject)$"))
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE, handle_message))
 
     print("✅ Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
