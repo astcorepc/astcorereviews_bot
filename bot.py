@@ -6,11 +6,11 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 # === ПЕРЕМЕННЫЕ ИЗ RAILWAY ===
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
-CHANNEL_ID = os.getenv("CHANNEL_ID")  # например -1002123456789
+CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 logging.basicConfig(level=logging.INFO)
 
-# === ГЛАВНОЕ МЕНЮ (как было) ===
+# === ГЛАВНОЕ МЕНЮ ===
 def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
@@ -19,7 +19,7 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === КЛАВИАТУРА ДЛЯ ОЦЕНКИ (звёзды текстом) ===
+# === КЛАВИАТУРА ДЛЯ ОЦЕНКИ (текстовые звёзды) ===
 def rating_keyboard():
     keyboard = [
         [
@@ -41,7 +41,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === ОБРАБОТКА ГЛАВНЫХ КНОПОК ===
+# === ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -76,33 +76,40 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📝 **Вы выбрали {stars}**\n\n"
         "Теперь напишите ваш отзыв текстом.\n"
         "Если хотите — приложите фото (одно).\n\n"
-        "Просто напишите текст и отправьте сообщение.",
+        "Просто отправьте сообщение с текстом и фото (если нужно).",
         parse_mode="Markdown"
     )
     context.user_data['waiting_for_review'] = True
 
-# === ПРИЁМ ТЕКСТА И ФОТО ОТ ПОЛЬЗОВАТЕЛЯ ===
+# === ПРИЁМ СООБЩЕНИЙ (ТЕКСТ + ФОТО) ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # Проверяем, есть ли текст или фото
+    # Проверяем, есть ли текст
     text = update.message.text
-    photo = None
-    if update.message.photo:
-        photo = update.message.photo[-1].file_id  # берём лучшее качество
+    # Проверяем, есть ли фото (берём самое качественное)
+    photo = update.message.photo[-1].file_id if update.message.photo else None
 
-    # Если пользователь отправил просто текст без фото — тоже работает
-    if context.user_data.get('waiting_for_review') and (text or photo):
-        # Если фото есть, но текст пустой — просим написать текст
+    # Если мы ждём отзыв
+    if context.user_data.get('waiting_for_review'):
+        # Если есть фото, но нет текста — просим написать текст
         if photo and not text:
             await update.message.reply_text(
-                "📝 **Пожалуйста, добавьте текст к отзыву.**\n\n"
-                "Напишите текст и, если нужно, приложите фото.",
+                "📝 **Пожалуйста, напишите текст отзыва.**\n\n"
+                "Вы можете отправить его вместе с фото.",
                 parse_mode="Markdown"
             )
             return
 
-        # Сохраняем отзыв
+        # Если нет ни текста, ни фото — игнорируем
+        if not text and not photo:
+            await update.message.reply_text(
+                "Пожалуйста, напишите текст отзыва.",
+                reply_markup=main_keyboard()
+            )
+            return
+
+        # Сохраняем данные
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         context.user_data['review_author'] = user.id
@@ -132,7 +139,6 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = context.user_data.get('review_photo')
     stars = "⭐" * rating
 
-    # Кнопки для админа
     keyboard = [
         [
             InlineKeyboardButton("✅ Опубликовать", callback_data="publish"),
@@ -141,7 +147,6 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Сообщение админу
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
@@ -172,7 +177,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     msg = query.message
     photo = msg.photo[-1].file_id if msg.photo else None
-    text = msg.caption if msg.caption else msg.text
+    caption = msg.caption if msg.caption else msg.text
 
     if query.data == "publish":
         if CHANNEL_ID:
@@ -180,28 +185,41 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
                     photo=photo,
-                    caption=text
+                    caption=caption
                 )
             else:
                 await context.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=text
+                    text=caption
                 )
-            await query.edit_message_caption(
-                caption="✅ **Отзыв опубликован в канале!**",
-                parse_mode="Markdown"
-            )
+
+            if msg.photo:
+                await query.edit_message_caption(
+                    caption="✅ **Отзыв опубликован в канале!**",
+                    parse_mode="Markdown"
+                )
+            else:
+                await query.edit_message_text(
+                    text="✅ **Отзыв опубликован в канале!**",
+                    parse_mode="Markdown"
+                )
         else:
-            await query.edit_message_caption(
-                caption="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway.",
+            await query.edit_message_text(
+                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway.",
                 parse_mode="Markdown"
             )
 
     elif query.data == "reject":
-        await query.edit_message_caption(
-            caption="❌ **Отзыв отклонён.**",
-            parse_mode="Markdown"
-        )
+        if msg.photo:
+            await query.edit_message_caption(
+                caption="❌ **Отзыв отклонён.**",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                text="❌ **Отзыв отклонён.**",
+                parse_mode="Markdown"
+            )
 
 # === ЗАПУСК ===
 def main():
