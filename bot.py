@@ -9,11 +9,12 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 logging.basicConfig(level=logging.INFO)
 
+# ===== МЕНЮ =====
 def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
-        [InlineKeyboardButton("🛠 Поддержка и гарантия", callback_data="support")],
-        [InlineKeyboardButton("📢 Наш Telegram-канал", url="https://t.me/ваш_канал")]
+        [InlineKeyboardButton("🛠 Поддержка", callback_data="support")],
+        [InlineKeyboardButton("📢 Наш канал", url="https://t.me/ваш_канал")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -29,6 +30,7 @@ def rating_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+# ===== СТАРТ =====
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
@@ -37,6 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ===== ОБРАБОТКА КНОПОК =====
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -57,6 +60,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+# ===== ВЫБОР ОЦЕНКИ =====
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -73,59 +77,49 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
+# ===== ПРИЁМ СООБЩЕНИЙ =====
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    if context.user_data.get('waiting_for_review'):
-        # Проверяем, есть ли текст
-        text = update.message.text
-        
-        # Проверяем, есть ли фото (в любом виде)
-        photo = None
-        if update.message.photo:
-            photo = update.message.photo[-1].file_id
-        elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
-            # Если фото отправлено как файл
-            photo = update.message.document.file_id
-
-        # Если есть только фото, а текста нет — просим текст
-        if photo and not text:
-            await update.message.reply_text(
-                "📝 **Пожалуйста, напишите текст отзыва.**",
-                parse_mode="Markdown"
-            )
-            return
-
-        # Если нет ни текста, ни фото
-        if not text and not photo:
-            return
-
-        # Сохраняем данные
-        context.user_data['review_text'] = text or "Без текста"
-        context.user_data['review_photo'] = photo
-        context.user_data['review_author'] = user.id
-
-        await send_to_admin(update, context)
-
-        await update.message.reply_text(
-            "✅ **Спасибо за ваш отзыв!**\n\n"
-            "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
-            parse_mode="Markdown"
-        )
-        context.user_data['waiting_for_review'] = False
-
-    else:
+    # ЕСЛИ МЫ НЕ ЖДЁМ ОТЗЫВ — ПОКАЗЫВАЕМ МЕНЮ
+    if not context.user_data.get('waiting_for_review'):
         await update.message.reply_text(
             "Используйте кнопки меню или /start",
             reply_markup=main_keyboard()
         )
+        return
 
-async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user = update.effective_user
-    text = context.user_data.get('review_text')
-    rating = context.user_data.get('rating', 0)
-    photo = context.user_data.get('review_photo')
+    # ПОЛУЧАЕМ ТЕКСТ (даже если он в подписи к фото)
+    text = update.message.caption if update.message.caption else update.message.text
+    
+    # ПОЛУЧАЕМ ФОТО (если есть)
+    photo = None
+    if update.message.photo:
+        photo = update.message.photo[-1].file_id
+    elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
+        photo = update.message.document.file_id
 
+    # ЕСЛИ ЕСТЬ ФОТО, НО НЕТ ТЕКСТА
+    if photo and not text:
+        await update.message.reply_text(
+            "📝 **Пожалуйста, напишите текст отзыва.**",
+            parse_mode="Markdown"
+        )
+        return
+
+    # ЕСЛИ НЕТ НИ ТЕКСТА, НИ ФОТО
+    if not text and not photo:
+        await update.message.reply_text(
+            "Пожалуйста, напишите текст отзыва.",
+            reply_markup=main_keyboard()
+        )
+        return
+
+    # СОХРАНЯЕМ
+    context.user_data['review_text'] = text or "Без текста"
+    context.user_data['review_photo'] = photo
+
+    # ОТПРАВЛЯЕМ АДМИНУ
     keyboard = [
         [
             InlineKeyboardButton("✅ Опубликовать", callback_data="publish"),
@@ -137,7 +131,7 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     caption = (
         f"📩 **Новый отзыв**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
-        f"⭐ Оценка: {rating} ⭐\n"
+        f"⭐ Оценка: {context.user_data['rating']} ⭐\n"
         f"📝 Текст:\n{text}"
     )
 
@@ -157,6 +151,17 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+    # ПОДТВЕРЖДАЕМ ПОЛЬЗОВАТЕЛЮ
+    await update.message.reply_text(
+        "✅ **Спасибо за ваш отзыв!**\n\n"
+        "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
+        parse_mode="Markdown"
+    )
+
+    # СБРАСЫВАЕМ СОСТОЯНИЕ
+    context.user_data['waiting_for_review'] = False
+
+# ===== ОБРАБОТКА АДМИНКИ =====
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -173,45 +178,18 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     if query.data == "publish":
         if CHANNEL_ID:
             if photo:
-                await context.bot.send_photo(
-                    chat_id=CHANNEL_ID,
-                    photo=photo,
-                    caption=caption
-                )
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
             else:
-                await context.bot.send_message(
-                    chat_id=CHANNEL_ID,
-                    text=caption
-                )
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
 
-            if msg.photo or (msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/')):
-                await query.edit_message_caption(
-                    caption="✅ **Опубликовано в канале**",
-                    parse_mode="Markdown"
-                )
-            else:
-                await query.edit_message_text(
-                    text="✅ **Опубликовано в канале**",
-                    parse_mode="Markdown"
-                )
+            await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown") if photo else await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
         else:
-            await query.edit_message_text(
-                text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.",
-                parse_mode="Markdown"
-            )
+            await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
 
     elif query.data == "reject":
-        if msg.photo or (msg.document and msg.document.mime_type and msg.document.mime_type.startswith('image/')):
-            await query.edit_message_caption(
-                caption="❌ **Отклонено**",
-                parse_mode="Markdown"
-            )
-        else:
-            await query.edit_message_text(
-                text="❌ **Отклонено**",
-                parse_mode="Markdown"
-            )
+        await query.edit_message_caption(caption="❌ **Отклонено**", parse_mode="Markdown") if photo else await query.edit_message_text(text="❌ **Отклонено**", parse_mode="Markdown")
 
+# ===== ЗАПУСК =====
 def main():
     app = Application.builder().token(TOKEN).build()
 
