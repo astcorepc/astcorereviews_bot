@@ -70,63 +70,88 @@ def services_keyboard():
     return InlineKeyboardMarkup(keyboard)
 
 def get_working_days():
-    """Возвращает ближайшие рабочие дни (ПН, СР, ПТ)"""
+    """Возвращает ближайшие рабочие дни (ПН, СР, ПТ) с их расписанием"""
     today = datetime.now().date()
     working_days = []
     
-    # Идём вперёд на 14 дней, чтобы найти все ПН, СР, ПТ
-    for i in range(14):
+    # Идём вперёд на 21 день, чтобы найти все ПН, СР, ПТ
+    for i in range(21):
         check_date = today + timedelta(days=i)
-        weekday = check_date.weekday()  # 0=ПН, 1=ВТ, 2=СР, 3=ЧТ, 4=ПТ, 5=СБ, 6=ВС
+        weekday = check_date.weekday()  # 0=ПН, 1=ВТ, 2=СР, 3=ЧТ, 4=ПТ
         
         if weekday in [0, 2, 4]:  # ПН, СР, ПТ
-            day_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+            day_names = {
+                0: "ПН",
+                2: "СР", 
+                4: "ПТ"
+            }
+            day_schedule = {
+                0: "11:00 – 17:00",
+                2: "12:00 – 18:00",
+                4: "11:00 – 17:00"
+            }
             date_str = check_date.strftime("%d.%m")
-            working_days.append((check_date.isoformat(), f"{day_names[weekday]} ({date_str})"))
+            working_days.append((
+                check_date.isoformat(), 
+                f"{day_names[weekday]} ({date_str})",
+                day_schedule[weekday]
+            ))
     
     return working_days[:6]  # Берём первые 6 доступных дней
 
 def date_keyboard():
-    """Выбор даты (только ПН, СР, ПТ)"""
+    """Выбор даты (только ПН, СР, ПТ) с указанием времени работы"""
     working_days = get_working_days()
     keyboard = []
     
-    # Разбиваем по 2 дня в строке
-    row = []
-    for i, (date_iso, display) in enumerate(working_days):
-        row.append(InlineKeyboardButton(f"📅 {display}", callback_data=f"date_{date_iso}"))
-        if len(row) == 2 or i == len(working_days) - 1:
-            keyboard.append(row)
-            row = []
+    for i, (date_iso, display, schedule) in enumerate(working_days):
+        keyboard.append([
+            InlineKeyboardButton(
+                f"📅 {display} ({schedule})", 
+                callback_data=f"date_{date_iso}"
+            )
+        ])
     
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_services")])
     return InlineKeyboardMarkup(keyboard)
 
-def time_keyboard():
-    """Выбор времени (слоты)"""
-    keyboard = [
-        [
-            InlineKeyboardButton("10:00", callback_data="time_10:00"),
-            InlineKeyboardButton("11:00", callback_data="time_11:00"),
-            InlineKeyboardButton("12:00", callback_data="time_12:00")
-        ],
-        [
-            InlineKeyboardButton("13:00", callback_data="time_13:00"),
-            InlineKeyboardButton("14:00", callback_data="time_14:00"),
-            InlineKeyboardButton("15:00", callback_data="time_15:00")
-        ],
-        [
-            InlineKeyboardButton("16:00", callback_data="time_16:00"),
-            InlineKeyboardButton("17:00", callback_data="time_17:00"),
-            InlineKeyboardButton("18:00", callback_data="time_18:00")
-        ],
-        [
-            InlineKeyboardButton("19:00", callback_data="time_19:00"),
-            InlineKeyboardButton("20:00", callback_data="time_20:00"),
-            InlineKeyboardButton("21:00", callback_data="time_21:00")
-        ],
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_booking_date")]
-    ]
+def get_time_slots_for_day(date_iso):
+    """Возвращает доступные слоты времени для конкретного дня"""
+    date_obj = datetime.fromisoformat(date_iso)
+    weekday = date_obj.weekday()
+    
+    # Расписание по дням
+    schedule = {
+        0: {"start": 11, "end": 17},  # ПН
+        2: {"start": 12, "end": 18},  # СР
+        4: {"start": 11, "end": 17}   # ПТ
+    }
+    
+    if weekday not in schedule:
+        return []
+    
+    start_hour = schedule[weekday]["start"]
+    end_hour = schedule[weekday]["end"]
+    
+    slots = []
+    for hour in range(start_hour, end_hour + 1):
+        slots.append(f"{hour:02d}:00")
+    
+    return slots
+
+def time_keyboard(date_iso):
+    """Выбор времени (только доступные слоты для дня)"""
+    slots = get_time_slots_for_day(date_iso)
+    keyboard = []
+    row = []
+    
+    for i, slot in enumerate(slots):
+        row.append(InlineKeyboardButton(slot, callback_data=f"time_{slot}"))
+        if len(row) == 3 or i == len(slots) - 1:
+            keyboard.append(row)
+            row = []
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_booking_date")])
     return InlineKeyboardMarkup(keyboard)
 
 # ==========================================
@@ -200,7 +225,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text(
                 f"📅 **Выберите дату для записи:**\n\n"
                 f"Услуга: {context.user_data.get('selected_service')}\n\n"
-                "Рабочие дни: ПН, СР, ПТ",
+                "Рабочие дни:\n"
+                "ПН: 11:00 – 17:00\n"
+                "СР: 12:00 – 18:00\n"
+                "ПТ: 11:00 – 17:00",
                 reply_markup=date_keyboard(),
                 parse_mode="Markdown"
             )
@@ -230,7 +258,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"✅ **Выбрана услуга:**\n{service}\n\n"
             "📅 **Теперь выберите дату:**\n\n"
-            "Рабочие дни: ПН, СР, ПТ",
+            "Рабочие дни:\n"
+            "ПН: 11:00 – 17:00\n"
+            "СР: 12:00 – 18:00\n"
+            "ПТ: 11:00 – 17:00",
             reply_markup=date_keyboard(),
             parse_mode="Markdown"
         )
@@ -250,8 +281,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(
             f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
             f"📅 **Дата:** {date_formatted} ({weekday})\n\n"
-            "🕐 **Теперь выберите время:**",
-            reply_markup=time_keyboard(),
+            "🕐 **Выберите удобное время:**",
+            reply_markup=time_keyboard(date_str),
             parse_mode="Markdown"
         )
         return
