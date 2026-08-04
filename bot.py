@@ -3,14 +3,12 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
-# === ПЕРЕМЕННЫЕ ИЗ RAILWAY ===
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 CHANNEL_ID = os.getenv("CHANNEL_ID")
 
 logging.basicConfig(level=logging.INFO)
 
-# === ГЛАВНОЕ МЕНЮ ===
 def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
@@ -19,7 +17,6 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === КНОПКИ ОЦЕНКИ (1 ⭐, 2 ⭐, 3 ⭐, 4 ⭐, 5 ⭐) ===
 def rating_keyboard():
     keyboard = [
         [
@@ -32,7 +29,6 @@ def rating_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
@@ -41,7 +37,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === ОБРАБОТКА ГЛАВНЫХ КНОПОК ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -62,7 +57,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# === ВЫБОР ОЦЕНКИ ===
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -79,14 +73,14 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === ПРИЁМ СООБЩЕНИЙ (ТЕКСТ + ФОТО) ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    text = update.message.text
-    photo = update.message.photo[-1].file_id if update.message.photo else None
-
     if context.user_data.get('waiting_for_review'):
+        text = update.message.text
+        photo = update.message.photo[-1].file_id if update.message.photo else None
+
+        # Если есть только фото, а текста нет — просим текст
         if photo and not text:
             await update.message.reply_text(
                 "📝 **Пожалуйста, напишите текст отзыва.**",
@@ -94,9 +88,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # Если нет ни текста, ни фото
         if not text and not photo:
             return
 
+        # Сохраняем данные
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         context.user_data['review_author'] = user.id
@@ -116,7 +112,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
-# === ОТПРАВКА АДМИНУ ===
 async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = context.user_data.get('review_text')
@@ -154,7 +149,6 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# === ОБРАБОТКА ДЕЙСТВИЙ АДМИНА ===
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -205,7 +199,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 parse_mode="Markdown"
             )
 
-# === ЗАПУСК ===
 def main():
     app = Application.builder().token(TOKEN).build()
 
