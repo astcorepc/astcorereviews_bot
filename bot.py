@@ -19,15 +19,13 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === КЛАВИАТУРА ДЛЯ ОЦЕНКИ (текстовые звёзды) ===
+# === КНОПКИ ОЦЕНКИ (цифра + звезда) ===
 def rating_keyboard():
     keyboard = [
         [
-            InlineKeyboardButton("⭐ 1", callback_data="rate_1"),
-            InlineKeyboardButton("⭐⭐ 2", callback_data="rate_2"),
-            InlineKeyboardButton("⭐⭐⭐ 3", callback_data="rate_3"),
-            InlineKeyboardButton("⭐⭐⭐⭐ 4", callback_data="rate_4"),
-            InlineKeyboardButton("⭐⭐⭐⭐⭐ 5", callback_data="rate_5")
+            InlineKeyboardButton("3 ⭐", callback_data="rate_3"),
+            InlineKeyboardButton("4 ⭐", callback_data="rate_4"),
+            InlineKeyboardButton("5 ⭐", callback_data="rate_5")
         ]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -41,14 +39,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ ===
+# === ОБРАБОТКА ГЛАВНЫХ КНОПОК ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "review":
         await query.edit_message_text(
-            "⭐ **Оцените нас от 1 до 5:**",
+            "⭐ **Оцените нас:**",
             reply_markup=rating_keyboard(),
             parse_mode="Markdown"
         )
@@ -62,65 +60,50 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# === ОБРАБОТКА ВЫБОРА ОЦЕНКИ ===
+# === ВЫБОР ОЦЕНКИ ===
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     rating = int(query.data.split("_")[1])
     context.user_data['rating'] = rating
-
-    stars = "⭐" * rating
-
-    await query.edit_message_text(
-        f"📝 **Вы выбрали {stars}**\n\n"
-        "Теперь напишите ваш отзыв текстом.\n"
-        "Если хотите — приложите фото (одно).\n\n"
-        "Просто отправьте сообщение с текстом и фото (если нужно).",
-        parse_mode="Markdown"
-    )
     context.user_data['waiting_for_review'] = True
 
-# === ПРИЁМ СООБЩЕНИЙ (ТЕКСТ + ФОТО) ===
+    await query.edit_message_text(
+        f"📝 **Вы выбрали {rating} ⭐**\n\n"
+        "Теперь напишите ваш отзыв текстом.\n"
+        "Если хотите — приложите фото (одно).\n\n"
+        "Отправьте текст и фото (если есть) одним сообщением.",
+        parse_mode="Markdown"
+    )
+
+# === ПРИЁМ СООБЩЕНИЙ ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # Проверяем, есть ли текст
     text = update.message.text
-    # Проверяем, есть ли фото (берём самое качественное)
     photo = update.message.photo[-1].file_id if update.message.photo else None
 
-    # Если мы ждём отзыв
     if context.user_data.get('waiting_for_review'):
-        # Если есть фото, но нет текста — просим написать текст
         if photo and not text:
             await update.message.reply_text(
-                "📝 **Пожалуйста, напишите текст отзыва.**\n\n"
-                "Вы можете отправить его вместе с фото.",
+                "📝 **Пожалуйста, напишите текст отзыва.**",
                 parse_mode="Markdown"
             )
             return
 
-        # Если нет ни текста, ни фото — игнорируем
         if not text and not photo:
-            await update.message.reply_text(
-                "Пожалуйста, напишите текст отзыва.",
-                reply_markup=main_keyboard()
-            )
             return
 
-        # Сохраняем данные
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         context.user_data['review_author'] = user.id
 
-        # Отправляем админу
         await send_to_admin(update, context)
 
-        # Подтверждение пользователю
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
-            "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
+            "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
             parse_mode="Markdown"
         )
         context.user_data['waiting_for_review'] = False
@@ -131,13 +114,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
-# === ОТПРАВКА АДМИНУ НА МОДЕРАЦИЮ ===
+# === ОТПРАВКА АДМИНУ ===
 async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = context.user_data.get('review_text')
     rating = context.user_data.get('rating', 0)
     photo = context.user_data.get('review_photo')
-    stars = "⭐" * rating
 
     keyboard = [
         [
@@ -148,9 +130,9 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     caption = (
-        f"📩 **Новый отзыв на модерацию**\n\n"
+        f"📩 **Новый отзыв**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
-        f"⭐ Оценка: {stars}\n"
+        f"⭐ Оценка: {rating} ⭐\n"
         f"📝 Текст:\n{text}"
     )
 
@@ -193,31 +175,32 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     text=caption
                 )
 
+            # Меняем текст у админа, НЕ отправляем новое сообщение
             if msg.photo:
                 await query.edit_message_caption(
-                    caption="✅ **Отзыв опубликован в канале!**",
+                    caption="✅ **Опубликовано в канале**",
                     parse_mode="Markdown"
                 )
             else:
                 await query.edit_message_text(
-                    text="✅ **Отзыв опубликован в канале!**",
+                    text="✅ **Опубликовано в канале**",
                     parse_mode="Markdown"
                 )
         else:
             await query.edit_message_text(
-                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway.",
+                text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.",
                 parse_mode="Markdown"
             )
 
     elif query.data == "reject":
         if msg.photo:
             await query.edit_message_caption(
-                caption="❌ **Отзыв отклонён.**",
+                caption="❌ **Отклонено**",
                 parse_mode="Markdown"
             )
         else:
             await query.edit_message_text(
-                text="❌ **Отзыв отклонён.**",
+                text="❌ **Отклонено**",
                 parse_mode="Markdown"
             )
 
