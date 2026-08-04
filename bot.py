@@ -317,88 +317,146 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
     )
 
 # ==========================================
-# 4. ПРИЁМ СООБЩЕНИЙ
+# 4. ПРИЁМ СООБЩЕНИЙ (ПОЛНОСТЬЮ ИСПРАВЛЕН)
 # ==========================================
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
-    if not text:
-        return
+    photo = None
 
-    # --- ВВОД БЮДЖЕТА (только для "под ключ") ---
+    # Проверяем, есть ли фото (в любом виде)
+    if update.message.photo:
+        photo = update.message.photo[-1].file_id
+    elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
+        photo = update.message.document.file_id
+
+    # ==========================================
+    # 1. ВВОД БЮДЖЕТА (только для "под ключ")
+    # ==========================================
     if context.user_data.get('waiting_for_budget'):
-        context.user_data['budget'] = text
-        context.user_data['waiting_for_budget'] = False
-        context.user_data['waiting_for_wishes'] = True
-        await update.message.reply_text(
-            f"✅ **Бюджет сохранён:** {text}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
-            reply_markup=back_keyboard(),
-            parse_mode="Markdown"
-        )
+        if text:
+            context.user_data['budget'] = text
+            context.user_data['waiting_for_budget'] = False
+            context.user_data['waiting_for_wishes'] = True
+            await update.message.reply_text(
+                f"✅ **Бюджет сохранён:** {text}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            await update.message.reply_text(
+                "💰 **Пожалуйста, напишите ваш бюджет в рублях.**",
+                parse_mode="Markdown"
+            )
         return
 
-    # --- ВВОД ПОЖЕЛАНИЙ (для обеих сборок) ---
+    # ==========================================
+    # 2. ВВОД ПОЖЕЛАНИЙ (для обеих сборок)
+    # ==========================================
     if context.user_data.get('waiting_for_wishes'):
-        context.user_data['wishes'] = text
-        context.user_data['waiting_for_wishes'] = False
+        if text:
+            context.user_data['wishes'] = text
+            context.user_data['waiting_for_wishes'] = False
 
-        # Если это "из ваших" — переходим к дополнениям
-        if context.user_data.get('selected_service_id') == "service_4":
-            context.user_data['waiting_for_extras'] = True
+            if context.user_data.get('selected_service_id') == "service_4":
+                context.user_data['waiting_for_extras'] = True
+                await update.message.reply_text(
+                    f"✅ **Пожелания сохранены:**\n{text}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n• Другие дополнения (опишите)\n\nЕсли у вас есть дополнения, опишите их выше. Если нет — просто напишите 'Нет'.",
+                    reply_markup=back_keyboard(),
+                    parse_mode="Markdown"
+                )
+                return
+            else:
+                await update.message.reply_text(
+                    f"✅ **Пожелания сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
+                    reply_markup=date_keyboard(),
+                    parse_mode="Markdown"
+                )
+                return
+        else:
             await update.message.reply_text(
-                f"✅ **Пожелания сохранены:**\n{text}\n\n➕ **Дополнения за дополнительную плату:**\nНапишите, что вы хотите добавить:\n\n• Установка дополнительного ПО\n• Дополнительные вентиляторы\n• Внешний вид (подсветка, корпус, кастомные провода и т.д.)\n• Другие дополнения (опишите)\n\nЕсли у вас есть дополнения, опишите их выше. Если нет — просто напишите 'Нет'.",
-                reply_markup=back_keyboard(),
+                "📝 **Пожалуйста, напишите ваши пожелания по сборке.**",
                 parse_mode="Markdown"
             )
             return
 
-        # Если это "под ключ" — переходим к дате
+    # ==========================================
+    # 3. ВВОД ДОПОЛНЕНИЙ (только для "из ваших")
+    # ==========================================
+    if context.user_data.get('waiting_for_extras'):
+        if text:
+            context.user_data['extras'] = text
+            context.user_data['waiting_for_extras'] = False
+            await update.message.reply_text(
+                f"✅ **Дополнения сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
+                reply_markup=date_keyboard(),
+                parse_mode="Markdown"
+            )
         else:
             await update.message.reply_text(
-                f"✅ **Пожелания сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
-                reply_markup=date_keyboard(),
+                "➕ **Пожалуйста, напишите дополнения или 'Нет'.**",
                 parse_mode="Markdown"
             )
         return
 
-    # --- ВВОД ДОПОЛНЕНИЙ (только для "из ваших комплектующих") ---
-    if context.user_data.get('waiting_for_extras'):
-        context.user_data['extras'] = text
-        context.user_data['waiting_for_extras'] = False
-        await update.message.reply_text(
-            f"✅ **Дополнения сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
-            reply_markup=date_keyboard(),
-            parse_mode="Markdown"
-        )
-        return
-
-    # --- ВВОД КОНТАКТОВ ---
+    # ==========================================
+    # 4. ВВОД КОНТАКТОВ
+    # ==========================================
     if context.user_data.get('waiting_for_contact'):
-        context.user_data['contact'] = text
-        context.user_data['waiting_for_contact'] = False
-        await send_booking_to_admin(update, context, user)
-        await update.message.reply_text(
-            "✅ **Запись принята!**\n\nМенеджер свяжется с вами. ⏳\n\nВернуться в меню: /start",
-            reply_markup=main_keyboard(),
-            parse_mode="Markdown"
-        )
-        clear_user_data(context)
+        if text:
+            context.user_data['contact'] = text
+            context.user_data['waiting_for_contact'] = False
+            await send_booking_to_admin(update, context, user)
+            await update.message.reply_text(
+                "✅ **Запись принята!**\n\nМенеджер свяжется с вами. ⏳\n\nВернуться в меню: /start",
+                reply_markup=main_keyboard(),
+                parse_mode="Markdown"
+            )
+            clear_user_data(context)
+        else:
+            await update.message.reply_text(
+                "📱 **Пожалуйста, введите ваш контактный телефон или Telegram @username:**",
+                parse_mode="Markdown"
+            )
         return
 
-    # --- ОТЗЫВЫ ---
+    # ==========================================
+    # 5. ОТЗЫВЫ (с фото и текстом)
+    # ==========================================
     if context.user_data.get('waiting_for_review'):
-        photo = None
-        if update.message.photo:
-            photo = update.message.photo[-1].file_id
-        elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
-            photo = update.message.document.file_id
-        await send_review_to_admin(update, context, user, text, photo)
+        # Если есть только фото, но нет текста — просим текст
+        if photo and not text:
+            await update.message.reply_text(
+                "📝 **Пожалуйста, напишите текст отзыва.**",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Если нет ни текста, ни фото — игнорируем
+        if not text and not photo:
+            await update.message.reply_text(
+                "Пожалуйста, напишите текст отзыва или приложите фото.",
+                reply_markup=main_keyboard()
+            )
+            return
+
+        # Отправляем отзыв админу
+        await send_review_to_admin(update, context, user, text or "Без текста", photo)
+        
+        # Сбрасываем состояние
         context.user_data['waiting_for_review'] = False
         clear_user_data(context)
+        
+        await update.message.reply_text(
+            "✅ **Спасибо за ваш отзыв!**\n\nОн отправлен на модерацию. ❤️",
+            parse_mode="Markdown"
+        )
         return
 
-    # --- ТИКЕТЫ ---
+    # ==========================================
+    # 6. ТИКЕТЫ (с фото и текстом)
+    # ==========================================
     if context.user_data.get('waiting_for_support'):
         file_id = None
         file_type = None
@@ -411,12 +469,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         elif update.message.video:
             file_id = update.message.video.file_id
             file_type = "video"
-        await send_ticket_to_admin(update, context, user, text, file_id, file_type)
+
+        if not text and not file_id:
+            await update.message.reply_text(
+                "Пожалуйста, опишите вашу проблему текстом.",
+                reply_markup=main_keyboard()
+            )
+            return
+
+        await send_ticket_to_admin(update, context, user, text or "Без текста", file_id, file_type)
         context.user_data['waiting_for_support'] = False
         clear_user_data(context)
         return
 
-    await update.message.reply_text("Используйте кнопки меню или /start", reply_markup=main_keyboard())
+    # ==========================================
+    # 7. НЕ В РЕЖИМЕ — ПОКАЗЫВАЕМ МЕНЮ
+    # ==========================================
+    await update.message.reply_text(
+        "Используйте кнопки меню или /start",
+        reply_markup=main_keyboard()
+    )
 
 # ==========================================
 # 5. ОТПРАВКИ АДМИНУ
