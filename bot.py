@@ -1,5 +1,6 @@
 import os
 import logging
+from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 
@@ -19,6 +20,7 @@ def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
         [InlineKeyboardButton("🛠 Поддержка", callback_data="support_menu")],
+        [InlineKeyboardButton("💵 Запись на услуги", callback_data="booking")],
         [InlineKeyboardButton("📢 Наш канал", url="https://t.me/astcorepc1")]
     ]
     return InlineKeyboardMarkup(keyboard)
@@ -53,6 +55,80 @@ def back_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def services_keyboard():
+    """Выбор услуги из прайс-листа"""
+    keyboard = [
+        [InlineKeyboardButton("🧹 Чистка ПК от пыли - 1 000 ₽", callback_data="service_1")],
+        [InlineKeyboardButton("🌡 Чистка ПК + замена термоинтерфейсов - 2 000 ₽", callback_data="service_2")],
+        [InlineKeyboardButton("🎮 Обслуживание видеокарты - 1 500 ₽", callback_data="service_3")],
+        [InlineKeyboardButton("⚙️ Сборка ПК (из ваших комплектующих) - 2 500 ₽", callback_data="service_4")],
+        [InlineKeyboardButton("⚙️ Сборка ПК (под ключ) - 4 000 ₽", callback_data="service_5")],
+        [InlineKeyboardButton("💾 Установка SSD/HDD - 750 ₽", callback_data="service_6")],
+        [InlineKeyboardButton("🖥 Установка Windows + драйверы - 1 000 ₽", callback_data="service_7")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+def get_working_days():
+    """Возвращает ближайшие рабочие дни (ПН, СР, ПТ)"""
+    today = datetime.now().date()
+    working_days = []
+    
+    # Идём вперёд на 14 дней, чтобы найти все ПН, СР, ПТ
+    for i in range(14):
+        check_date = today + timedelta(days=i)
+        weekday = check_date.weekday()  # 0=ПН, 1=ВТ, 2=СР, 3=ЧТ, 4=ПТ, 5=СБ, 6=ВС
+        
+        if weekday in [0, 2, 4]:  # ПН, СР, ПТ
+            day_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+            date_str = check_date.strftime("%d.%m")
+            working_days.append((check_date.isoformat(), f"{day_names[weekday]} ({date_str})"))
+    
+    return working_days[:6]  # Берём первые 6 доступных дней
+
+def date_keyboard():
+    """Выбор даты (только ПН, СР, ПТ)"""
+    working_days = get_working_days()
+    keyboard = []
+    
+    # Разбиваем по 2 дня в строке
+    row = []
+    for i, (date_iso, display) in enumerate(working_days):
+        row.append(InlineKeyboardButton(f"📅 {display}", callback_data=f"date_{date_iso}"))
+        if len(row) == 2 or i == len(working_days) - 1:
+            keyboard.append(row)
+            row = []
+    
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_services")])
+    return InlineKeyboardMarkup(keyboard)
+
+def time_keyboard():
+    """Выбор времени (слоты)"""
+    keyboard = [
+        [
+            InlineKeyboardButton("10:00", callback_data="time_10:00"),
+            InlineKeyboardButton("11:00", callback_data="time_11:00"),
+            InlineKeyboardButton("12:00", callback_data="time_12:00")
+        ],
+        [
+            InlineKeyboardButton("13:00", callback_data="time_13:00"),
+            InlineKeyboardButton("14:00", callback_data="time_14:00"),
+            InlineKeyboardButton("15:00", callback_data="time_15:00")
+        ],
+        [
+            InlineKeyboardButton("16:00", callback_data="time_16:00"),
+            InlineKeyboardButton("17:00", callback_data="time_17:00"),
+            InlineKeyboardButton("18:00", callback_data="time_18:00")
+        ],
+        [
+            InlineKeyboardButton("19:00", callback_data="time_19:00"),
+            InlineKeyboardButton("20:00", callback_data="time_20:00"),
+            InlineKeyboardButton("21:00", callback_data="time_21:00")
+        ],
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_booking_date")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 # ==========================================
 # 2. ОБРАБОТЧИКИ КОМАНД И КНОПОК
 # ==========================================
@@ -61,7 +137,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /start"""
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
-        "Мы ценим каждого клиента. Вы можете оставить отзыв или задать вопрос.",
+        "Мы ценим каждого клиента.\n\n"
+        "Вы можете:\n"
+        "⭐ Оставить отзыв\n"
+        "🛠 Задать вопрос в поддержку\n"
+        "💵 Записаться на услугу",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
@@ -87,9 +167,18 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if query.data == "booking":
+        await query.edit_message_text(
+            "💵 **Выберите услугу из списка:**",
+            reply_markup=services_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+
     if query.data == "back_to_main":
         context.user_data['waiting_for_support'] = False
         context.user_data['waiting_for_review'] = False
+        context.user_data['booking_step'] = None
         
         await query.edit_message_text(
             "💻 **Главное меню**",
@@ -98,8 +187,99 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if query.data == "back_to_services":
+        await query.edit_message_text(
+            "💵 **Выберите услугу из списка:**",
+            reply_markup=services_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+
+    if query.data == "back_to_booking_date":
+        if context.user_data.get('selected_service'):
+            await query.edit_message_text(
+                f"📅 **Выберите дату для записи:**\n\n"
+                f"Услуга: {context.user_data.get('selected_service')}\n\n"
+                "Рабочие дни: ПН, СР, ПТ",
+                reply_markup=date_keyboard(),
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                "💵 **Выберите услугу из списка:**",
+                reply_markup=services_keyboard(),
+                parse_mode="Markdown"
+            )
+        return
+
+    # --- ОБРАБОТКА ВЫБОРА УСЛУГИ ---
+    if query.data.startswith("service_"):
+        services_map = {
+            "service_1": "🧹 Чистка ПК от пыли - 1 000 ₽",
+            "service_2": "🌡 Чистка ПК + замена термоинтерфейсов - 2 000 ₽",
+            "service_3": "🎮 Обслуживание видеокарты - 1 500 ₽",
+            "service_4": "⚙️ Сборка ПК (из ваших комплектующих) - 2 500 ₽",
+            "service_5": "⚙️ Сборка ПК (под ключ) - 4 000 ₽",
+            "service_6": "💾 Установка SSD/HDD - 750 ₽",
+            "service_7": "🖥 Установка Windows + драйверы - 1 000 ₽"
+        }
+        service = services_map.get(query.data, "Неизвестная услуга")
+        context.user_data['selected_service'] = service
+        context.user_data['booking_step'] = 'date'
+        
+        await query.edit_message_text(
+            f"✅ **Выбрана услуга:**\n{service}\n\n"
+            "📅 **Теперь выберите дату:**\n\n"
+            "Рабочие дни: ПН, СР, ПТ",
+            reply_markup=date_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+
+    # --- ОБРАБОТКА ВЫБОРА ДАТЫ ---
+    if query.data.startswith("date_"):
+        date_str = query.data.replace("date_", "")
+        context.user_data['selected_date'] = date_str
+        context.user_data['booking_step'] = 'time'
+        
+        date_obj = datetime.fromisoformat(date_str)
+        date_formatted = date_obj.strftime("%d.%m.%Y")
+        weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+        weekday = weekday_names.get(date_obj.weekday(), "")
+        
+        await query.edit_message_text(
+            f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+            f"📅 **Дата:** {date_formatted} ({weekday})\n\n"
+            "🕐 **Теперь выберите время:**",
+            reply_markup=time_keyboard(),
+            parse_mode="Markdown"
+        )
+        return
+
+    # --- ОБРАБОТКА ВЫБОРА ВРЕМЕНИ ---
+    if query.data.startswith("time_"):
+        time_str = query.data.replace("time_", "")
+        context.user_data['selected_time'] = time_str
+        context.user_data['booking_step'] = 'contacts'
+        
+        date_obj = datetime.fromisoformat(context.user_data.get('selected_date'))
+        date_formatted = date_obj.strftime("%d.%m.%Y")
+        weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+        weekday = weekday_names.get(date_obj.weekday(), "")
+        
+        await query.edit_message_text(
+            f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+            f"📅 **Дата:** {date_formatted} ({weekday})\n"
+            f"🕐 **Время:** {time_str}\n\n"
+            "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
+            "Наш менеджер свяжется с вами для подтверждения.",
+            parse_mode="Markdown"
+        )
+        context.user_data['waiting_for_contact'] = True
+        return
+
 # ==========================================
-# 3. ОБРАБОТКА ВЫБОРА ОЦЕНКИ
+# 3. ОБРАБОТКА ВЫБОРА ОЦЕНКИ (ОТЗЫВЫ)
 # ==========================================
 
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -153,6 +333,30 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
+    # --- РЕЖИМ ЗАПИСИ (ввод контактов) ---
+    if context.user_data.get('waiting_for_contact'):
+        contact = update.message.text
+        if not contact:
+            await update.message.reply_text(
+                "📱 **Пожалуйста, введите ваш контактный телефон или Telegram @username:**",
+                parse_mode="Markdown"
+            )
+            return
+
+        context.user_data['contact'] = contact
+        context.user_data['waiting_for_contact'] = False
+        
+        await send_booking_to_admin(update, context, user)
+        
+        await update.message.reply_text(
+            "✅ **Ваша запись принята!**\n\n"
+            "Наш менеджер свяжется с вами для подтверждения в ближайшее время. ⏳\n\n"
+            "Вернуться в меню: /start",
+            parse_mode="Markdown"
+        )
+        return
+
+    # --- РЕЖИМ ОТЗЫВА ---
     if context.user_data.get('waiting_for_review'):
         text = update.message.caption if update.message.caption else update.message.text
         photo = None
@@ -179,6 +383,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['waiting_for_review'] = False
         return
 
+    # --- РЕЖИМ ТИКЕТА ---
     if context.user_data.get('waiting_for_support'):
         text = update.message.caption if update.message.caption else update.message.text
         file_id = None
@@ -210,7 +415,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 # ==========================================
-# 6. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
+# 6. ОТПРАВКА АДМИНУ (ЗАПИСЬ)
+# ==========================================
+
+async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user):
+    """Отправка записи админу"""
+    service = context.user_data.get('selected_service', 'Не выбрана')
+    date_str = context.user_data.get('selected_date', 'Не выбрана')
+    time_str = context.user_data.get('selected_time', 'Не выбрано')
+    contact = context.user_data.get('contact', 'Не указан')
+
+    try:
+        date_obj = datetime.fromisoformat(date_str)
+        date_formatted = date_obj.strftime("%d.%m.%Y")
+        weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
+        weekday = weekday_names.get(date_obj.weekday(), "")
+        date_display = f"{date_formatted} ({weekday})"
+    except:
+        date_display = date_str
+
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Подтвердить запись", callback_data="booking_confirm"),
+            InlineKeyboardButton("❌ Отменить запись", callback_data="booking_cancel")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    caption = (
+        f"💵 **НОВАЯ ЗАПИСЬ НА УСЛУГУ**\n\n"
+        f"👤 Клиент: @{user.username} (ID: {user.id})\n"
+        f"📱 Контакт: {contact}\n"
+        f"🛠 Услуга:\n{service}\n"
+        f"📅 Дата: {date_display}\n"
+        f"🕐 Время: {time_str}"
+    )
+
+    await context.bot.send_message(
+        chat_id=ADMIN_ID,
+        text=caption,
+        reply_markup=reply_markup,
+        parse_mode="Markdown"
+    )
+
+# ==========================================
+# 7. ОТПРАВКА АДМИНУ (ОТЗЫВЫ)
 # ==========================================
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
@@ -254,7 +503,7 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 7. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
+# 8. ОТПРАВКА АДМИНУ (ТИКЕТЫ)
 # ==========================================
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
@@ -312,7 +561,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 8. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
+# 9. ОБРАБОТКА ДЕЙСТВИЙ АДМИНА
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -328,6 +577,22 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     caption = msg.caption if msg.caption else msg.text
 
+    # --- ЗАПИСЬ ---
+    if query.data == "booking_confirm":
+        await query.edit_message_text(
+            text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\n{caption}",
+            parse_mode="Markdown"
+        )
+        return
+
+    if query.data == "booking_cancel":
+        await query.edit_message_text(
+            text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}",
+            parse_mode="Markdown"
+        )
+        return
+
+    # --- ОТЗЫВЫ ---
     if query.data == "publish_review":
         if CHANNEL_ID:
             if photo:
@@ -359,6 +624,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
+    # --- ТИКЕТЫ ---
     if query.data == "ticket_accepted":
         await query.edit_message_caption(
             caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
@@ -380,20 +646,20 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         return
 
 # ==========================================
-# 9. ЗАПУСК
+# 10. ЗАПУСК
 # ==========================================
 
 def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|back_to_main)$"))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|booking|back_to_main|back_to_services|back_to_booking_date|service_.*|date_.*|time_.*)$"))
     app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed)$"))
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
 
-    print("✅ Бот запущен!")
+    print("✅ Бот запущен (отзывы + тикеты + запись на услуги)!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
