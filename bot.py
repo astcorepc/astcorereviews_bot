@@ -84,18 +84,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
-        # Подтверждение пользователю (и добавляем кнопку "Меню", чтобы можно было вернуться)
+        # Подтверждение пользователю (и добавляем кнопку "Меню")
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
             "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
-            reply_markup=main_keyboard(),  # <--- Возвращаем меню
+            reply_markup=main_keyboard(),
             parse_mode="Markdown"
         )
         context.user_data['waiting_for_review'] = False
         context.user_data['pending_review'] = None
 
     else:
-        # Если пользователь пишет что-то не по делу, отправляем ему меню
         await update.message.reply_text(
             "Используйте кнопки меню или /start",
             reply_markup=main_keyboard()
@@ -119,21 +118,17 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     if query.data == "publish":
         # Достаём данные автора из памяти
         author_username = context.user_data.get('review_username', 'Не указан')
-        author_fullname = context.user_data.get('review_fullname', 'Аноним')
 
         if CHANNEL_ID:
-            # Публикуем в канал с указанием автора
+            # Публикуем в канал: эмодзи, юз, пустая строка, текст
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"⭐ **Новый отзыв о нас!**\n\n"
-                     f"👤 **От:** @{author_username} ({author_fullname})\n"
-                     f"📝 {review_body}"
+                text=f"👤 @{author_username}\n\n{review_body}"
             )
             
+            # Обновляем сообщение у админа
             await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n"
-                     f"👤 От: @{author_username}\n"
-                     f"📝 {review_body}"
+                text=f"✅ **Отзыв опубликован в канале!**\n\n👤 @{author_username}\n\n{review_body}"
             )
         else:
             await query.edit_message_text(
