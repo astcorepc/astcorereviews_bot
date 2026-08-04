@@ -46,6 +46,13 @@ def support_topics_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
+def back_keyboard():
+    """Клавиатура с одной кнопкой 'Назад'"""
+    keyboard = [
+        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
 # ==========================================
 # 2. ОБРАБОТЧИКИ КОМАНД И КНОПОК
 # ==========================================
@@ -64,7 +71,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # --- КНОПКА "ПОДАТЬ ОТЗЫВ" (работает как раньше) ---
+    # --- КНОПКА "ПОДАТЬ ОТЗЫВ" ---
     if query.data == "review":
         await query.edit_message_text(
             "⭐ **Оцените нас от 1 до 5:**",
@@ -73,7 +80,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # --- КНОПКА "ПОДДЕРЖКА" (НОВОЕ МЕНЮ) ---
+    # --- КНОПКА "ПОДДЕРЖКА" ---
     if query.data == "support_menu":
         await query.edit_message_text(
             "🛠 **Выберите тему вашего вопроса:**",
@@ -84,6 +91,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- КНОПКА "НАЗАД" (ВОЗВРАТ В ГЛАВНОЕ МЕНЮ) ---
     if query.data == "back_to_main":
+        # Сбрасываем все состояния
+        context.user_data['waiting_for_support'] = False
+        context.user_data['waiting_for_review'] = False
+        
         await query.edit_message_text(
             "💻 **Главное меню**",
             reply_markup=main_keyboard(),
@@ -109,6 +120,7 @@ async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Теперь напишите ваш отзыв текстом.\n"
         "Если хотите — приложите фото (одно).\n\n"
         "Отправьте текст и фото (если есть) одним сообщением.",
+        reply_markup=back_keyboard(),  # <-- КНОПКА НАЗАД
         parse_mode="Markdown"
     )
 
@@ -136,6 +148,7 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
         "Опишите вашу ситуацию максимально подробно.\n"
         "Приложите фото или видео, если это поможет решить вопрос быстрее.\n\n"
         "После отправки мы свяжемся с вами в ближайшее время. ⏳",
+        reply_markup=back_keyboard(),  # <-- КНОПКА НАЗАД
         parse_mode="Markdown"
     )
 
@@ -149,9 +162,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # --- 5.1. РЕЖИМ ОТЗЫВА ---
     if context.user_data.get('waiting_for_review'):
-        # Получаем текст (из caption или из текста)
         text = update.message.caption if update.message.caption else update.message.text
-        # Получаем фото
         photo = None
         if update.message.photo:
             photo = update.message.photo[-1].file_id
@@ -172,18 +183,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Сохраняем отзыв и отправляем админу
         await send_review_to_admin(update, context, user, text, photo)
-
-        # Сбрасываем состояние
         context.user_data['waiting_for_review'] = False
         return
 
-    # --- 5.2. РЕЖИМ ТИКЕТА (ПОДДЕРЖКА) ---
+    # --- 5.2. РЕЖИМ ТИКЕТА ---
     if context.user_data.get('waiting_for_support'):
-        # Получаем текст (из caption или из текста)
         text = update.message.caption if update.message.caption else update.message.text
-        # Получаем фото/видео/документ
         file_id = None
         file_type = None
         if update.message.photo:
@@ -203,10 +209,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Отправляем тикет админу
         await send_ticket_to_admin(update, context, user, text, file_id, file_type)
-
-        # Сбрасываем состояние
         context.user_data['waiting_for_support'] = False
         return
 
@@ -282,7 +285,6 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         f"📝 Сообщение:\n{text}"
     )
 
-    # Отправляем админу с файлом (если есть)
     if file_id and file_type == "photo":
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
@@ -326,7 +328,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Админ нажал кнопку (опубликовать/отклонить/принять/закрыть)"""
+    """Админ нажал кнопку"""
     query = update.callback_query
     await query.answer()
 
@@ -339,7 +341,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     caption = msg.caption if msg.caption else msg.text
 
-    # --- 8.1. ОТЗЫВЫ ---
+    # --- ОТЗЫВЫ ---
     if query.data == "publish_review":
         if CHANNEL_ID:
             if photo:
@@ -371,7 +373,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-    # --- 8.2. ТИКЕТЫ ---
+    # --- ТИКЕТЫ ---
     if query.data == "ticket_accepted":
         await query.edit_message_caption(
             caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
@@ -406,7 +408,7 @@ def main():
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
 
-    print("✅ Бот запущен и работает (отзывы + тикеты)!")
+    print("✅ Бот запущен (отзывы + тикеты + кнопка Назад)!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
