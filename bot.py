@@ -43,7 +43,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === Обработка кнопок ===
+# === Обработка кнопок (выбор звезд) ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
@@ -88,7 +88,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
-# === Приём текста ===
+# === Приём текста и отправка админу ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
@@ -97,11 +97,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rating = context.user_data.get('review_rating', 5)
         stars_symbols = "⭐" * rating
 
-        # ЗАПОМИНАЕМ ТЕКСТ В ПАМЯТЬ НАВСЕГДА
+        # Сохраняем данные
         context.user_data['pending_review'] = text
-        context.user_data['review_author'] = user.id
-        context.user_data['review_username'] = user.username
-        context.user_data['review_fullname'] = user.full_name
+        context.user_data['review_author_username'] = user.username
+        context.user_data['review_author_fullname'] = user.full_name
 
         keyboard = [
             [
@@ -111,6 +110,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
+        # Отправляем админу
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=f"📩 **Новый отзыв на модерацию**\n\n"
@@ -120,6 +120,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup
         )
 
+        # Ответ пользователю
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
             "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
@@ -134,36 +135,67 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
-# === Обработка действий админа ===
+# === Обработка действий админа (публикация) ===
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    # БЕРЕМ ДАННЫЕ ПРЯМО ИЗ ПАМЯТИ (не парсим сообщение)
-    author_username = context.user_data.get('review_username', None)
-    author_fullname = context.user_data.get('review_fullname', 'Не указан')
-    review_body = context.user_data.get('pending_review', 'Текст не указан')
-    rating = context.user_data.get('review_rating', 5)
-    stars_symbols = "⭐" * rating
+    # ДОСТАЕМ ДАННЫЕ ИЗ ТЕКСТА СООБЩЕНИЯ АДМИНА (это самый надежный способ)
+    full_text = query.message.text
+    
+    # Ищем строки в сообщении админа
+    lines = full_text.split("\n")
+    
+    # 1. Достаём юзера
+    username_line = ""
+    for line in lines:
+        if line.startswith("👤"):
+            username_line = line
+            break
+    
+    # Парсим юзера из строки (например: "👤 @astcorepc01 (ID: 123)")
+    username = "Не указан"
+    if "@" in username_line:
+        # Берем всё от @ до пробела
+        username = username_line.split("@")[1].split()[0]
+        username = f"@{username}"
+    elif "ID:" in username_line:
+        # Если есть ID, но нет @, пишем просто "Пользователь"
+        username = "Пользователь"
 
-    # ЕСЛИ НЕТ НИКА, СТАВИМ ПОЛНОЕ ИМЯ
-    if author_username:
-        display_name = f"@{author_username}"
-    else:
-        display_name = author_fullname
+    # 2. Достаём оценку
+    stars_symbols = ""
+    for line in lines:
+        if line.startswith("⭐ Оценка:"):
+            # Берем только звезды
+            stars_part = line.split(":")[1].strip()
+            stars_symbols = stars_part.split()[0] # берем первые символы (звезды)
+            break
+    
+    # 3. Достаём текст отзыва (он всегда идет после строки "📝 Текст:")
+    review_body = "Текст не указан"
+    for i, line in enumerate(lines):
+        if line.startswith("📝 Текст:"):
+            # Всё, что идет после двоеточия в этой строке, плюс все следующие строки
+            review_body = line.replace("📝 Текст:", "").strip()
+            # Если есть следующие строки, добавляем их (маловероятно, но на всякий случай)
+            if i + 1 < len(lines):
+                review_body += "\n" + "\n".join(lines[i+1:])
+            break
 
     if query.data == "publish":
         if CHANNEL_ID:
+            # КРАСИВАЯ ПУБЛИКАЦИЯ В КАНАЛ
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"📢 Новый отзыв ⭐\n\n"
-                     f"👤 {display_name}\n"
+                text=f"**Новый Отзыв**\n\n"
                      f"{stars_symbols}\n\n"
+                     f"{username}\n\n"
                      f"{review_body}"
             )
             
             await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**"
+                text="✅ **Отзыв опубликован в канале!**"
             )
         else:
             await query.edit_message_text(
@@ -172,7 +204,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     elif query.data == "reject":
         await query.edit_message_text(
-            text=f"❌ **Отзыв отклонён**"
+            text="❌ **Отзыв отклонён**"
         )
 
 # === Запуск ===
