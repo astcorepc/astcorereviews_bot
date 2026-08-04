@@ -10,25 +10,25 @@ CHANNEL_ID = os.getenv("CHANNEL_ID")  # например -1002123456789
 
 logging.basicConfig(level=logging.INFO)
 
-# === КЛАВИАТУРА РЕЙТИНГА (звёзды) ===
-def rating_keyboard():
-    keyboard = [
-        [
-            InlineKeyboardButton("⭐", callback_data="rate_1"),
-            InlineKeyboardButton("⭐⭐", callback_data="rate_2"),
-            InlineKeyboardButton("⭐⭐⭐", callback_data="rate_3"),
-            InlineKeyboardButton("⭐⭐⭐⭐", callback_data="rate_4"),
-            InlineKeyboardButton("⭐⭐⭐⭐⭐", callback_data="rate_5")
-        ]
-    ]
-    return InlineKeyboardMarkup(keyboard)
-
-# === ГЛАВНОЕ МЕНЮ ===
+# === ГЛАВНОЕ МЕНЮ (как было) ===
 def main_keyboard():
     keyboard = [
         [InlineKeyboardButton("⭐ Подать отзыв", callback_data="review")],
-        [InlineKeyboardButton("🛠 Поддержка", callback_data="support")],
-        [InlineKeyboardButton("📢 Наш канал", url="https://t.me/ваш_канал")]
+        [InlineKeyboardButton("🛠 Поддержка и гарантия", callback_data="support")],
+        [InlineKeyboardButton("📢 Наш Telegram-канал", url="https://t.me/ваш_канал")]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# === КЛАВИАТУРА ДЛЯ ОЦЕНКИ (звёзды текстом) ===
+def rating_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("⭐ 1", callback_data="rate_1"),
+            InlineKeyboardButton("⭐⭐ 2", callback_data="rate_2"),
+            InlineKeyboardButton("⭐⭐⭐ 3", callback_data="rate_3"),
+            InlineKeyboardButton("⭐⭐⭐⭐ 4", callback_data="rate_4"),
+            InlineKeyboardButton("⭐⭐⭐⭐⭐ 5", callback_data="rate_5")
+        ]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -36,18 +36,17 @@ def main_keyboard():
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
-        "Нажмите «Подать отзыв», чтобы оценить нас.",
+        "Мы ценим каждого клиента. Расскажите о своем опыте или задайте вопрос.",
         reply_markup=main_keyboard(),
         parse_mode="Markdown"
     )
 
-# === ОБРАБОТКА КНОПОК ГЛАВНОГО МЕНЮ ===
+# === ОБРАБОТКА ГЛАВНЫХ КНОПОК ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "review":
-        # Показываем звёзды
         await query.edit_message_text(
             "⭐ **Оцените нас от 1 до 5:**",
             reply_markup=rating_keyboard(),
@@ -57,57 +56,67 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif query.data == "support":
         await query.edit_message_text(
             "🛠 **Поддержка и гарантия**\n\n"
-            "По любым вопросам пишите:\n"
-            "@ваш_менеджер\n\n"
-            "Мы на связи ежедневно с 10:00 до 22:00 ⚡",
+            "• По вопросам гарантии пишите сюда: @ваш_менеджер\n"
+            "• Или на почту: support@astcore.ru\n"
+            "• Мы на связи ежедневно с 10:00 до 22:00 ⚡",
             parse_mode="Markdown"
         )
 
-# === ОБРАБОТКА РЕЙТИНГА (звёзды) ===
+# === ОБРАБОТКА ВЫБОРА ОЦЕНКИ ===
 async def rating_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    rating = int(query.data.split("_")[1])  # 1..5
+    rating = int(query.data.split("_")[1])
     context.user_data['rating'] = rating
 
-    # Рисуем звёзды текстом
     stars = "⭐" * rating
+
     await query.edit_message_text(
         f"📝 **Вы выбрали {stars}**\n\n"
         "Теперь напишите ваш отзыв текстом.\n"
         "Если хотите — приложите фото (одно).\n\n"
-        "Напишите текст и отправьте.",
+        "Просто напишите текст и отправьте сообщение.",
         parse_mode="Markdown"
     )
-    context.user_data['waiting_for_review_text'] = True
+    context.user_data['waiting_for_review'] = True
 
-# === ПРИЁМ ТЕКСТА И ФОТО ===
+# === ПРИЁМ ТЕКСТА И ФОТО ОТ ПОЛЬЗОВАТЕЛЯ ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
 
-    # Получаем текст и фото
+    # Проверяем, есть ли текст или фото
     text = update.message.text
     photo = None
     if update.message.photo:
         photo = update.message.photo[-1].file_id  # берём лучшее качество
 
-    # Если мы ждём текст отзыва
-    if context.user_data.get('waiting_for_review_text') and text:
-        context.user_data['review_text'] = text
+    # Если пользователь отправил просто текст без фото — тоже работает
+    if context.user_data.get('waiting_for_review') and (text or photo):
+        # Если фото есть, но текст пустой — просим написать текст
+        if photo and not text:
+            await update.message.reply_text(
+                "📝 **Пожалуйста, добавьте текст к отзыву.**\n\n"
+                "Напишите текст и, если нужно, приложите фото.",
+                parse_mode="Markdown"
+            )
+            return
+
+        # Сохраняем отзыв
+        context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         context.user_data['review_author'] = user.id
 
-        # Отправляем админу на модерацию
+        # Отправляем админу
         await send_to_admin(update, context)
 
         # Подтверждение пользователю
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
-            "Он отправлен на модерацию. После проверки мы опубликуем его в канале. ❤️",
+            "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
             parse_mode="Markdown"
         )
-        context.user_data['waiting_for_review_text'] = False
+        context.user_data['waiting_for_review'] = False
 
     else:
         await update.message.reply_text(
@@ -115,7 +124,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=main_keyboard()
         )
 
-# === ОТПРАВКА АДМИНУ ===
+# === ОТПРАВКА АДМИНУ НА МОДЕРАЦИЮ ===
 async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = context.user_data.get('review_text')
@@ -132,7 +141,7 @@ async def send_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    # Формируем сообщение админу
+    # Сообщение админу
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
@@ -161,10 +170,9 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     query = update.callback_query
     await query.answer()
 
-    # Извлекаем текст и фото из сообщения админа
     msg = query.message
-    text = msg.caption if msg.caption else msg.text
     photo = msg.photo[-1].file_id if msg.photo else None
+    text = msg.caption if msg.caption else msg.text
 
     if query.data == "publish":
         if CHANNEL_ID:
