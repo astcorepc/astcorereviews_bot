@@ -110,15 +110,37 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # Ищем текст отзыва (берем всё, что идет после последнего перехода на новую строку)
     if "\n" in review_text:
         review_body = review_text.split("\n")[-1]
+       # Получаем текст сообщения, на которое нажали
+    review_text = query.message.text
+    
+    # Пытаемся вытащить текст отзыва. Если не получается - ставим заглушку.
+    if "\n" in review_text:
+        # Берем всё, что после последнего переноса строки
+        review_body = review_text.split("\n")[-1]
     else:
+        # Если переноса строки нет, берем весь текст
         review_body = review_text
-                break
+
+    # --- ЗАЩИТА ОТ ПУСТОГО ТЕКСТА (ДОБАВЛЕНО) ---
+    if not review_body:
+        review_body = "Текст отзыва не указан (пустое сообщение)"
+    # ------------------------------------------
 
     if query.data == "publish":
         # Публикуем в канал
         if CHANNEL_ID:
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
+                text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
+            )
+            
+            await query.edit_message_text(
+                text=f"✅ **Отзыв опубликован в канале!**\n\n{review_body}"
+            )
+        else:
+            await query.edit_message_text(
+                text="⚠️ Канал не настроен. Добавь переменную CHANNEL_ID в Railway."
+            )
                 text=f"⭐ **Новый отзыв о нас!**\n\n{review_body}"
             )
             await query.edit_message_text(
