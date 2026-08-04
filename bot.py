@@ -129,13 +129,13 @@ async def support_topic_handler(update: Update, context: ContextTypes.DEFAULT_TY
 
     topic = topic_map.get(query.data, "Другое")
     context.user_data['support_topic'] = topic
-    context.user_data['waiting_for_support'] = True  # Включаем режим ожидания сообщения для тикета
+    context.user_data['waiting_for_support'] = True
 
     await query.edit_message_text(
-        f"📩 **Тема:** {topic}\n\n"
-        "Опишите вашу проблему как можно подробнее.\n"
-        "Вы можете приложить фото или видео.\n\n"
-        "Наш специалист свяжется с вами в ближайшее время.",
+        f"📩 **Тема обращения:** {topic}\n\n"
+        "Опишите вашу ситуацию максимально подробно.\n"
+        "Приложите фото или видео, если это поможет решить вопрос быстрее.\n\n"
+        "После отправки мы свяжемся с вами в ближайшее время. ⏳",
         parse_mode="Markdown"
     )
 
