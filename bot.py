@@ -196,6 +196,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
+            context.user_data['extras'] = "Нет"
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n📝 **Напишите пожелания по сборке:**\n\nНапример: для игр, для работы, какой процессор, видеокарта и т.д.",
@@ -205,6 +206,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         elif query.data == "service_5":
+            context.user_data['budget'] = "Не указан"
+            context.user_data['wishes'] = "Не указаны"
+            context.user_data['extras'] = None  # <-- ВАЖНО: не ставим "Нет"
             context.user_data['waiting_for_budget'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n💰 **Какой бюджет?**\n\nНапишите сумму в рублях (например: 80 000 ₽)",
@@ -247,7 +251,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday = weekday_names.get(date_obj.weekday(), "")
         service_id = context.user_data.get('selected_service_id', '')
 
-        if service_id == "service_5" and not context.user_data.get('extras'):
+        # === Для "под ключ" — сначала дополнения ===
+        if service_id == "service_5" and context.user_data.get('extras') is None:
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n\n➕ **Дополнения за доп. плату:**\nНапишите, что хотите добавить (или 'Нет'):",
@@ -256,6 +261,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === Для "из ваших" — запрашиваем пожелания ===
         if service_id == "service_4" and not context.user_data.get('wishes'):
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
@@ -265,6 +271,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # === Всё заполнено — запрашиваем контакты ===
         await query.edit_message_text(
             f"✅ **Услуга:** {context.user_data.get('selected_service')}\n📅 **Дата:** {date_formatted} ({weekday})\n🕐 **Время:** {time_str}\n💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n📱 **Введите контактный телефон или @username:**",
             reply_markup=back_keyboard(),
@@ -316,6 +323,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
+    # --- ВВОД БЮДЖЕТА (только для "под ключ") ---
     if context.user_data.get('waiting_for_budget'):
         context.user_data['budget'] = text
         context.user_data['waiting_for_budget'] = False
@@ -327,9 +335,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # --- ВВОД ПОЖЕЛАНИЙ (для обеих сборок) ---
     if context.user_data.get('waiting_for_wishes'):
         context.user_data['wishes'] = text
         context.user_data['waiting_for_wishes'] = False
+
+        # Если это "под ключ" — переходим к дополнениям
         if context.user_data.get('selected_service_id') == "service_5":
             context.user_data['waiting_for_extras'] = True
             await update.message.reply_text(
@@ -337,6 +348,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
+            return
+
+        # Если это "из ваших" — переходим к дате
         else:
             await update.message.reply_text(
                 f"✅ **Пожелания сохранены:**\n{text}\n\n📅 **Теперь выберите дату:**\n\nПН: 11:00 – 17:00\nСР: 12:00 – 18:00\nПТ: 11:00 – 17:00",
@@ -345,6 +359,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
         return
 
+    # --- ВВОД ДОПОЛНЕНИЙ (только для "под ключ") ---
     if context.user_data.get('waiting_for_extras'):
         context.user_data['extras'] = text
         context.user_data['waiting_for_extras'] = False
@@ -355,6 +370,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    # --- ВВОД КОНТАКТОВ ---
     if context.user_data.get('waiting_for_contact'):
         context.user_data['contact'] = text
         context.user_data['waiting_for_contact'] = False
@@ -367,6 +383,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         clear_user_data(context)
         return
 
+    # --- ОТЗЫВЫ ---
     if context.user_data.get('waiting_for_review'):
         photo = None
         if update.message.photo:
@@ -378,6 +395,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         clear_user_data(context)
         return
 
+    # --- ТИКЕТЫ ---
     if context.user_data.get('waiting_for_support'):
         file_id = None
         file_type = None
@@ -422,7 +440,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     caption = f"💵 **НОВАЯ ЗАПИСЬ**\n\n👤 @{user.username} (ID: {user.id})\n📱 Контакт: {contact}\n🛠 {service}\n📅 {date_display}\n🕐 {time_str}\n"
     if budget and budget != "Не требуется":
         caption += f"💰 Бюджет: {budget}\n"
-    if wishes and wishes != "Нет":
+    if wishes and wishes != "Нет" and wishes != "Не указаны":
         caption += f"📝 Пожелания:\n{wishes}\n"
     if extras and extras != "Нет":
         caption += f"➕ Дополнения:\n{extras}"
