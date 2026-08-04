@@ -19,7 +19,22 @@ def main_keyboard():
     ]
     return InlineKeyboardMarkup(keyboard)
 
-# === Команда /start (она же кнопка "Меню") ===
+# === Клавиатура для выбора звезд ===
+def stars_keyboard():
+    keyboard = [
+        [
+            InlineKeyboardButton("1 ⭐", callback_data="star_1"),
+            InlineKeyboardButton("2 ⭐", callback_data="star_2"),
+            InlineKeyboardButton("3 ⭐", callback_data="star_3")
+        ],
+        [
+            InlineKeyboardButton("4 ⭐", callback_data="star_4"),
+            InlineKeyboardButton("5 ⭐", callback_data="star_5")
+        ]
+    ]
+    return InlineKeyboardMarkup(keyboard)
+
+# === Команда /start ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "💻 **Добро пожаловать в AST CORE ПК!**\n\n"
@@ -28,15 +43,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown"
     )
 
-# === Обработка кнопок ===
+# === Обработка кнопок (главное меню и звезды) ===
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     if query.data == "review":
-        context.user_data['waiting_for_review'] = True
+        # Предлагаем выбрать оценку
         await query.edit_message_text(
-            "✍️ **Напишите ваш отзыв одним сообщением.**\n\n"
+            "⭐ **Оцените нашу работу от 1 до 5:**\n\n"
+            "Выберите количество звезд:",
+            reply_markup=stars_keyboard(),
+            parse_mode="Markdown"
+        )
+
+    elif query.data.startswith("star_"):
+        # Пользователь выбрал звезды
+        stars = int(query.data.split("_")[1])
+        context.user_data['review_rating'] = stars  # Запоминаем оценку
+        context.user_data['waiting_for_review'] = True # Ждем текст
+
+        await query.edit_message_text(
+            f"✅ **Вы выбрали {stars} {self._get_stars_text(stars)}**\n\n"
+            "✍️ Теперь **напишите ваш отзыв** одним сообщением.\n\n"
             "Расскажите:\n"
             "• Как прошла покупка?\n"
             "• Как показал себя ПК?\n"
@@ -54,13 +83,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="Markdown"
         )
 
+# Вспомогательная функция для красивого текста звезд
+def _get_stars_text(self, count):
+    if count == 1: return "звезда"
+    elif 2 <= count <= 4: return "звезды"
+    else: return "звезд"
+
 # === Приём текста (отзыв от пользователя) ===
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
     if context.user_data.get('waiting_for_review'):
-        # Сохраняем отзыв и данные автора в память
+        rating = context.user_data.get('review_rating', 5)
+        stars_symbols = "⭐" * rating # Рисуем звездочки (например: ⭐⭐⭐⭐⭐)
+
+        # Сохраняем данные в память
         context.user_data['pending_review'] = text
         context.user_data['review_author'] = user.id
         context.user_data['review_username'] = user.username
@@ -75,22 +113,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
 
-        # Отправляем отзыв админу на модерацию
+        # Отправляем админу на модерацию (с оценкой)
         await context.bot.send_message(
             chat_id=ADMIN_ID,
             text=f"📩 **Новый отзыв на модерацию**\n\n"
                  f"👤 @{user.username} (ID: {user.id})\n"
+                 f"⭐ Оценка: {stars_symbols} ({rating}/5)\n"
                  f"📝 Текст:\n{text}",
             reply_markup=reply_markup
         )
 
-        # Подтверждение пользователю (и добавляем кнопку "Меню")
+        # Подтверждение пользователю
         await update.message.reply_text(
             "✅ **Спасибо за ваш отзыв!**\n\n"
             "Он отправлен на модерацию. После проверки мы опубликуем его в нашем канале. ❤️",
-            reply_markup=main_keyboard(),
             parse_mode="Markdown"
         )
+        
+        # Сбрасываем состояния
         context.user_data['waiting_for_review'] = False
         context.user_data['pending_review'] = None
 
@@ -107,28 +147,36 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # Получаем текст сообщения и вытаскиваем отзыв
     full_message_text = query.message.text
-    if "\n" in full_message_text:
-        review_body = full_message_text.split("\n")[-1]
-    else:
-        review_body = full_message_text
-
+    review_lines = full_message_text.split("\n")
+    
+    # Ищем строку с текстом отзыва в сообщении админа
+    review_body = "Текст не указан"
+    for line in review_lines:
+        if line.startswith("📝 Текст:"):
+            review_body = line.replace("📝 Текст:", "").strip()
+            break
+            
     if not review_body:
-        review_body = "Текст отзыва не указан (пустое сообщение)"
+        review_body = "Текст не указан"
+
+    # Достаём данные из памяти
+    author_username = context.user_data.get('review_username', 'Не указан')
+    rating = context.user_data.get('review_rating', 5)
+    stars_symbols = "⭐" * rating
 
     if query.data == "publish":
-        # Достаём данные автора из памяти
-        author_username = context.user_data.get('review_username', 'Не указан')
-
         if CHANNEL_ID:
-            # Публикуем в канал: эмодзи, юз, пустая строка, текст
+            # Публикуем в канал с НОВЫМ ФОРМАТОМ
             await context.bot.send_message(
                 chat_id=CHANNEL_ID,
-                text=f"👤 @{author_username}\n\n{review_body}"
+                text=f"**Новый отзыв**\n\n"
+                     f"👤 @{author_username}\n"
+                     f"{stars_symbols}\n\n"
+                     f"{review_body}"
             )
             
-            # Обновляем сообщение у админа
             await query.edit_message_text(
-                text=f"✅ **Отзыв опубликован в канале!**\n\n👤 @{author_username}\n\n{review_body}"
+                text=f"✅ **Отзыв опубликован в канале!**\n\n👤 @{author_username}"
             )
         else:
             await query.edit_message_text(
@@ -145,7 +193,7 @@ def main():
     app = Application.builder().token(TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support)$"))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support|star_\\d+)$"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish|reject)$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
