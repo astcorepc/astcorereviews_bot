@@ -142,10 +142,12 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support)$"))
     app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish|reject)$"))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-
-    print("✅ Бот запущен и готов к работе!")
     
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+# ==========================================
+# ВСТАВЬ ЭТОТ КУСОК ПРЯМО СЮДА (перед if __name__):
+# ==========================================
+async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"💥 ОШИБКА В БОТЕ: {context.error}")
+    import traceback
+    traceback.print_exc()
+# ==========================================
