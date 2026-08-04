@@ -239,8 +239,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_service_id'] = query.data
         context.user_data['booking_step'] = 'service_selected'
         
-        # Проверяем, нужен ли бюджет (для сборок ПК)
-        if query.data in ["service_4", "service_5"]:
+        # --- СБОРКА ПК (из ваших комплектующих) — ТОЛЬКО ПОЖЕЛАНИЯ ---
+        if query.data == "service_4":
+            context.user_data['budget'] = "Не требуется"
+            context.user_data['waiting_for_wishes'] = True
+            await query.edit_message_text(
+                f"✅ **Выбрана услуга:**\n{service}\n\n"
+                "📝 **Напишите ваши пожелания по сборке:**\n\n"
+                "Например: для игр, для работы, какой процессор, видеокарта и т.д.\n\n"
+                "⬅️ Если хотите вернуться к выбору услуги, нажмите кнопку назад.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        
+        # --- СБОРКА ПК (под ключ) — БЮДЖЕТ + ПОЖЕЛАНИЯ + ДОПОЛНЕНИЯ ---
+        elif query.data == "service_5":
             context.user_data['waiting_for_budget'] = True
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
@@ -250,10 +264,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
+            return
+        
+        # --- ОСТАЛЬНЫЕ УСЛУГИ ---
         else:
-            # Для остальных услуг сразу переходим к выбору даты
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Нет"
+            context.user_data['extras'] = "Нет"
             context.user_data['booking_step'] = 'date'
             await query.edit_message_text(
                 f"✅ **Выбрана услуга:**\n{service}\n\n"
@@ -298,15 +315,36 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
         weekday = weekday_names.get(date_obj.weekday(), "")
         
-        # Если это сборка ПК, сначала запрашиваем пожелания
-        service_id = context.user_data.get('selected_service_id', '')
-        if service_id in ["service_4", "service_5"] and not context.user_data.get('wishes'):
-            context.user_data['waiting_for_wishes'] = True
+        # Если это сборка ПК (под ключ) и ещё не вводили дополнения
+        if context.user_data.get('selected_service_id') == "service_5" and not context.user_data.get('extras'):
+            context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
                 f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
                 f"📅 **Дата:** {date_formatted} ({weekday})\n"
                 f"🕐 **Время:** {time_str}\n"
                 f"💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n\n"
+                "➕ **Дополнения за дополнительную плату:**\n\n"
+                "Напишите, что вы хотите добавить:\n"
+                "• Установка дополнительного ПО\n"
+                "• Настройка BIOS\n"
+                "• Кабельный менеджмент\n"
+                "• Дополнительные вентиляторы\n"
+                "• Или что-то другое\n\n"
+                "Если дополнений нет, напишите 'Нет'.",
+                reply_markup=back_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        
+        # Если дополнения уже есть или услуга не требует дополнений
+        service_id = context.user_data.get('selected_service_id', '')
+        if service_id == "service_4" and not context.user_data.get('wishes'):
+            # Сборка из ваших — запрашиваем пожелания
+            context.user_data['waiting_for_wishes'] = True
+            await query.edit_message_text(
+                f"✅ **Услуга:** {context.user_data.get('selected_service')}\n"
+                f"📅 **Дата:** {date_formatted} ({weekday})\n"
+                f"🕐 **Время:** {time_str}\n\n"
                 "📝 **Напишите ваши пожелания по сборке:**\n\n"
                 "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
                 reply_markup=back_keyboard(),
@@ -314,7 +352,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         
-        # Если пожелания уже есть или услуга не требует бюджета
+        # Всё заполнено — показываем ввод контактов
         await show_contact_input(update, context, date_formatted, weekday)
         return
 
@@ -331,7 +369,8 @@ async def show_contact_input(update: Update, context: ContextTypes.DEFAULT_TYPE,
             f"📅 **Дата:** {date_formatted} ({weekday})\n"
             f"🕐 **Время:** {context.user_data.get('selected_time')}\n"
             f"💰 **Бюджет:** {context.user_data.get('budget', 'Не указан')}\n"
-            f"📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n\n"
+            f"📝 **Пожелания:** {context.user_data.get('wishes', 'Нет')}\n"
+            f"➕ **Дополнения:** {context.user_data.get('extras', 'Нет')}\n\n"
             "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
             "Наш менеджер свяжется с вами для подтверждения.",
             reply_markup=back_keyboard(),
@@ -395,22 +434,18 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text
 
-    # --- ВВОД БЮДЖЕТА ---
+    # --- ВВОД БЮДЖЕТА (только для "под ключ") ---
     if context.user_data.get('waiting_for_budget'):
         if text:
             context.user_data['budget'] = text
             context.user_data['waiting_for_budget'] = False
-            context.user_data['booking_step'] = 'date'
-            
-            # Переходим к выбору даты
+            # После бюджета запрашиваем пожелания
+            context.user_data['waiting_for_wishes'] = True
             await update.message.reply_text(
                 f"✅ **Бюджет сохранён:** {text}\n\n"
-                "📅 **Теперь выберите дату:**\n\n"
-                "Рабочие дни:\n"
-                "ПН: 11:00 – 17:00\n"
-                "СР: 12:00 – 18:00\n"
-                "ПТ: 11:00 – 17:00",
-                reply_markup=date_keyboard(),
+                "📝 **Напишите ваши пожелания по сборке:**\n\n"
+                "Например: для игр, для работы, какой процессор, видеокарта и т.д.",
+                reply_markup=back_keyboard(),
                 parse_mode="Markdown"
             )
             return
@@ -427,23 +462,64 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             context.user_data['wishes'] = text
             context.user_data['waiting_for_wishes'] = False
             
-            date_obj = datetime.fromisoformat(context.user_data.get('selected_date'))
-            date_formatted = date_obj.strftime("%d.%m.%Y")
-            weekday_names = {0: "ПН", 2: "СР", 4: "ПТ"}
-            weekday = weekday_names.get(date_obj.weekday(), "")
+            # Если это сборка под ключ — переходим к дополнениям
+            if context.user_data.get('selected_service_id') == "service_5":
+                context.user_data['waiting_for_extras'] = True
+                await update.message.reply_text(
+                    f"✅ **Пожелания сохранены:**\n{text}\n\n"
+                    "➕ **Дополнения за дополнительную плату:**\n\n"
+                    "Напишите, что вы хотите добавить:\n"
+                    "• Установка дополнительного ПО\n"
+                    "• Настройка BIOS\n"
+                    "• Кабельный менеджмент\n"
+                    "• Дополнительные вентиляторы\n"
+                    "• Или что-то другое\n\n"
+                    "Если дополнений нет, напишите 'Нет'.",
+                    reply_markup=back_keyboard(),
+                    parse_mode="Markdown"
+                )
+                return
             
-            await update.message.reply_text(
-                f"✅ **Пожелания сохранены:**\n{text}\n\n"
-                "📱 **Введите ваш контактный телефон или Telegram @username:**\n\n"
-                "Наш менеджер свяжется с вами для подтверждения.",
-                reply_markup=back_keyboard(),
-                parse_mode="Markdown"
-            )
-            context.user_data['waiting_for_contact'] = True
-            return
+            # Для остальных услуг (включая сборку из ваших комплектующих) переходим к дате
+            else:
+                await update.message.reply_text(
+                    f"✅ **Пожелания сохранены:**\n{text}\n\n"
+                    "📅 **Теперь выберите дату:**\n\n"
+                    "Рабочие дни:\n"
+                    "ПН: 11:00 – 17:00\n"
+                    "СР: 12:00 – 18:00\n"
+                    "ПТ: 11:00 – 17:00",
+                    reply_markup=date_keyboard(),
+                    parse_mode="Markdown"
+                )
+                return
         else:
             await update.message.reply_text(
                 "📝 **Пожалуйста, напишите ваши пожелания по сборке.**",
+                parse_mode="Markdown"
+            )
+            return
+
+    # --- ВВОД ДОПОЛНЕНИЙ (только для "под ключ") ---
+    if context.user_data.get('waiting_for_extras'):
+        if text:
+            context.user_data['extras'] = text
+            context.user_data['waiting_for_extras'] = False
+            
+            await update.message.reply_text(
+                f"✅ **Дополнения сохранены:**\n{text}\n\n"
+                "📅 **Теперь выберите дату:**\n\n"
+                "Рабочие дни:\n"
+                "ПН: 11:00 – 17:00\n"
+                "СР: 12:00 – 18:00\n"
+                "ПТ: 11:00 – 17:00",
+                reply_markup=date_keyboard(),
+                parse_mode="Markdown"
+            )
+            return
+        else:
+            await update.message.reply_text(
+                "➕ **Пожалуйста, напишите дополнения или 'Нет'.**",
                 parse_mode="Markdown"
             )
             return
@@ -538,6 +614,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     contact = context.user_data.get('contact', 'Не указан')
     budget = context.user_data.get('budget', 'Не указан')
     wishes = context.user_data.get('wishes', 'Нет')
+    extras = context.user_data.get('extras', 'Нет')
 
     try:
         date_obj = datetime.fromisoformat(date_str)
@@ -565,11 +642,17 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         f"🕐 Время: {time_str}\n"
     )
     
-    # Добавляем бюджет и пожелания, если они есть
+    # Добавляем бюджет только для "под ключ"
     if budget and budget != "Не требуется":
         caption += f"💰 Бюджет: {budget}\n"
+    
+    # Добавляем пожелания (для всех сборок)
     if wishes and wishes != "Нет":
-        caption += f"📝 Пожелания:\n{wishes}"
+        caption += f"📝 Пожелания:\n{wishes}\n"
+    
+    # Добавляем дополнения только для "под ключ"
+    if extras and extras != "Нет" and context.user_data.get('selected_service_id') == "service_5":
+        caption += f"➕ Дополнения:\n{extras}"
 
     await context.bot.send_message(
         chat_id=ADMIN_ID,
@@ -700,87 +783,4 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # --- ЗАПИСЬ ---
     if query.data == "booking_confirm":
         await query.edit_message_text(
-            text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\n{caption}",
-            parse_mode="Markdown"
-        )
-        return
-
-    if query.data == "booking_cancel":
-        await query.edit_message_text(
-            text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}",
-            parse_mode="Markdown"
-        )
-        return
-
-    # --- ОТЗЫВЫ ---
-    if query.data == "publish_review":
-        if CHANNEL_ID:
-            if photo:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
-            else:
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
-
-            await query.edit_message_caption(
-                caption="✅ **Опубликовано в канале**",
-                parse_mode="Markdown"
-            ) if photo else await query.edit_message_text(
-                text="✅ **Опубликовано в канале**",
-                parse_mode="Markdown"
-            )
-        else:
-            await query.edit_message_text(
-                text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.",
-                parse_mode="Markdown"
-            )
-        return
-
-    if query.data == "reject_review":
-        await query.edit_message_caption(
-            caption="❌ **Отзыв отклонён**",
-            parse_mode="Markdown"
-        ) if photo else await query.edit_message_text(
-            text="❌ **Отзыв отклонён**",
-            parse_mode="Markdown"
-        )
-        return
-
-    # --- ТИКЕТЫ ---
-    if query.data == "ticket_accepted":
-        await query.edit_message_caption(
-            caption="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
-            parse_mode="Markdown"
-        ) if photo else await query.edit_message_text(
-            text="✅ **Тикет принят в работу**\n\nСпециалист скоро свяжется с клиентом.",
-            parse_mode="Markdown"
-        )
-        return
-
-    if query.data == "ticket_closed":
-        await query.edit_message_caption(
-            caption="❌ **Тикет закрыт**",
-            parse_mode="Markdown"
-        ) if photo else await query.edit_message_text(
-            text="❌ **Тикет закрыт**",
-            parse_mode="Markdown"
-        )
-        return
-
-# ==========================================
-# 11. ЗАПУСК
-# ==========================================
-
-def main():
-    app = Application.builder().token(TOKEN).build()
-
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|booking|back_to_main|back_to_services|back_to_booking_date|service_.*|date_.*|time_.*)$"))
-    app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
-    app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel)$"))
-    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.Document.IMAGE | filters.VIDEO, handle_message))
-
-    print("✅ Бот запущен (отзывы + тикеты + запись на услуги + бюджет/пожелания для сборки)!")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
-
-if __name__ == "__main__":
-    main()
+            text=f"✅
