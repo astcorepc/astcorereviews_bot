@@ -117,7 +117,7 @@ def clear_user_data(context):
         'waiting_for_reject_reason',
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
-        'review_user_id', 'review_text', 'review_photo', 'reject_user_id'
+        'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -619,7 +619,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА (ИСПРАВЛЕН)
+# 6. ОБРАБОТЧИК АДМИНА
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
