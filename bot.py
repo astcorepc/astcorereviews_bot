@@ -703,4 +703,35 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # === ОТЗЫВЫ — ОТКАЗАТЬ ===
     if query.data == "review_reject":
-        context.user_data['waiting_for_re
+        context.user_data['waiting_for_reject_reason'] = True
+        context.user_data['reject_user_id'] = context.user_data.get('review_user_id')
+        
+        if photo or video or document:
+            await query.edit_message_caption(
+                caption="✍️ **Напишите причину отказа:**\n\nЭто сообщение будет отправлено пользователю.",
+                parse_mode="Markdown"
+            )
+        else:
+            await query.edit_message_text(
+                text="✍️ **Напишите причину отказа:**\n\nЭто сообщение будет отправлено пользователю.",
+                parse_mode="Markdown"
+            )
+        return
+
+# ==========================================
+# 7. ЗАПУСК
+# ==========================================
+
+def main():
+    app = Application.builder().token(TOKEN).build()
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|booking|back_to_main|back_to_services|back_to_booking_date|service_.*|date_.*|time_.*)$"))
+    app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
+    app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel|review_approve|review_reject)$"))
+    app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, handle_message))
+    print("✅ Бот запущен!")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
+if __name__ == "__main__":
+    main()
