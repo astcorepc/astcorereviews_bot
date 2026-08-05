@@ -114,11 +114,11 @@ def clear_user_data(context):
     keys_to_clear = [
         'waiting_for_review', 'waiting_for_support', 'waiting_for_contact',
         'waiting_for_budget', 'waiting_for_wishes', 'waiting_for_extras',
-        'waiting_for_reject_reason', 'waiting_for_booking_reject_reason',
+        'waiting_for_reject_reason',
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
         'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id',
-        'review_media_type', 'review_clean_text', 'booking_user_id', 'booking_data'
+        'review_media_type', 'review_clean_text', 'booking_user_id'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -380,36 +380,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-    # === ВВОД ПРИЧИНЫ ОТКАЗА (для ЗАПИСЕЙ) ===
-    if context.user_data.get('waiting_for_booking_reject_reason'):
-        if text:
-            user_id = context.user_data.get('booking_user_id')
-            reason = text
-            service = context.user_data.get('selected_service', 'Неизвестная услуга')
-            context.user_data['waiting_for_booking_reject_reason'] = False
-            
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text=f"❌ **Ваша запись на услугу отклонена.**\n\n🛠 Услуга: {service}\n📝 Причина: {reason}\n\nЕсли у вас есть вопросы, свяжитесь с администрацией: @astcorepc01",
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-            
-            await update.message.reply_text(
-                "✅ **Уведомление об отказе отправлено пользователю!**",
-                parse_mode="Markdown"
-            )
-            clear_user_data(context)
-            return
-        else:
-            await update.message.reply_text(
-                "✍️ **Пожалуйста, напишите причину отказа.**",
-                parse_mode="Markdown"
-            )
-            return
-
     # === ВВОД БЮДЖЕТА ===
     if context.user_data.get('waiting_for_budget'):
         if text:
@@ -596,7 +566,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         keyboard = [
             [
                 InlineKeyboardButton("✅ Подтвердить", callback_data="booking_confirm"),
-                InlineKeyboardButton("❌ Отказать", callback_data="booking_reject_simple")
+                InlineKeyboardButton("❌ Отменить", callback_data="booking_cancel")
             ]
         ]
     
@@ -720,28 +690,50 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # === ЗАПИСЬ — ОТКАЗАТЬ (для сборок — с причиной) ===
     if query.data == "booking_reject":
-        context.user_data['waiting_for_booking_reject_reason'] = True
-        context.user_data['booking_user_id'] = context.user_data.get('booking_user_id')
+        context.user_data['waiting_for_reject_reason'] = True
+        context.user_data['reject_user_id'] = context.user_data.get('booking_user_id')
+        context.user_data['selected_service'] = context.user_data.get('selected_service')
         await query.edit_message_text(
             text="✍️ **Напишите причину отказа:**\n\nЭто сообщение будет отправлено пользователю.",
             parse_mode="Markdown"
         )
         return
 
-    # === ЗАПИСЬ — ОТКАЗАТЬ (для простых услуг — сразу, без причины) ===
-    if query.data == "booking_reject_simple":
+    # === ЗАПИСЬ — ОТМЕНИТЬ (для простых услуг) ===
+    if query.data == "booking_cancel":
         user_id = context.user_data.get('booking_user_id')
-        service = context.user_data.get('selected_service', 'Неизвестная услуга')
         if user_id:
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"❌ **Ваша запись на услугу отклонена.**\n\n🛠 Услуга: {service}\n\nЕсли у вас есть вопросы, свяжитесь с администрацией: @astcorepc01",
+                    text="❌ **Ваша запись на услугу отменена.**\n\nЕсли у вас есть вопросы, свяжитесь с администрацией: @astcorepc01",
                     parse_mode="Markdown"
                 )
             except:
                 pass
         await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\nПользователь уведомлён.\n\n{caption}", parse_mode="Markdown")
+        return
+
+    # === ОТЗЫВЫ ===
+    if query.data == "publish_review":
+        if CHANNEL_ID:
+            if photo:
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
+            else:
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
+            if photo:
+                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
+            else:
+                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
+        else:
+            await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
+        return
+
+    if query.data == "reject_review":
+        if photo:
+            await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
+        else:
+            await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
         return
 
     # === ТИКЕТЫ ===
@@ -857,7 +849,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|booking|back_to_main|back_to_services|back_to_booking_date|service_.*|date_.*|time_.*)$"))
     app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_reject|booking_reject_simple|review_approve|review_reject)$"))
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel|booking_reject|review_approve|review_reject)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, handle_message))
     print("✅ Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
