@@ -118,7 +118,7 @@ def clear_user_data(context):
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
         'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id',
-        'review_media_group_id', 'review_media_type'
+        'review_media_type', 'review_clean_text'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -483,6 +483,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['review_video'] = video
         context.user_data['review_user_id'] = user.id
         context.user_data['review_media_type'] = media_type
+        context.user_data['review_clean_text'] = text or "Без текста"
 
         await send_review_to_admin(update, context, user, text or "Без текста", photo, video, media_type)
         
@@ -573,11 +574,12 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['review_photo'] = photo
     context.user_data['review_video'] = video
     context.user_data['review_media_type'] = media_type
+    context.user_data['review_clean_text'] = text or "Без текста"
     
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
         f"👤 @{user.username} (ID: {user.id})\n"
-        f"⭐ Оценка: {rating} ⭐\n"
+        f"⭐ Оценка: {rating} ★\n"
         f"📝 Текст:\n{text}"
     )
     
@@ -683,31 +685,39 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
         return
 
-    # === ОТЗЫВЫ — ОДОБРИТЬ (С ФОТО И ВИДЕО) ===
+    # === ОТЗЫВЫ — ОДОБРИТЬ ===
     if query.data == "review_approve":
         if CHANNEL_ID:
-            # Получаем сохранённые медиа из context.user_data
+            # Получаем сохранённые медиа и чистый текст
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
-            review_media_type = context.user_data.get('review_media_type')
+            review_clean_text = context.user_data.get('review_clean_text', 'Без текста')
+            rating = context.user_data.get('rating', 0)
+            
+            # Формируем ЧИСТЫЙ текст для канала (без служебной информации)
+            # Оценка: 3 ★ (как и просил пользователь)
+            channel_text = f"⭐ **Оценка: {rating} ★**\n\n{review_clean_text}"
             
             # Отправляем в канал с медиа
-            if review_photo and review_media_type == "photo":
+            if review_photo:
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
                     photo=review_photo,
-                    caption=caption
+                    caption=channel_text,
+                    parse_mode="Markdown"
                 )
             elif review_video:
                 await context.bot.send_video(
                     chat_id=CHANNEL_ID,
                     video=review_video,
-                    caption=caption
+                    caption=channel_text,
+                    parse_mode="Markdown"
                 )
             else:
                 await context.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=caption
+                    text=channel_text,
+                    parse_mode="Markdown"
                 )
             
             # Уведомляем пользователя
