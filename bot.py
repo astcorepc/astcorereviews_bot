@@ -118,7 +118,7 @@ def clear_user_data(context):
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
         'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id',
-        'review_media_type', 'review_clean_text', 'booking_user_id'
+        'review_media_type', 'review_clean_text'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -351,7 +351,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         photo = update.message.document.file_id
         media_type = "photo"
 
-    # === ВВОД ПРИЧИНЫ ОТКАЗА (для ОТЗЫВОВ) ===
+    # === ВВОД ПРИЧИНЫ ОТКАЗА ===
     if context.user_data.get('waiting_for_reject_reason'):
         if text:
             user_id = context.user_data.get('reject_user_id')
@@ -361,7 +361,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
-                    text=f"❌ **Ваш отзыв отклонён.**\n\nПричина: {reason}\n\nЕсли у вас есть вопросы, свяжитесь с администрацией: @astcorepc01",
+                    text=f"❌ **Ваш отзыв отклонён.**\n\nПричина: {reason}\n\nЕсли у вас есть вопросы, свяжитесь с администрацией.",
                     parse_mode="Markdown"
                 )
             except:
@@ -448,7 +448,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if text:
             context.user_data['contact'] = text
             context.user_data['waiting_for_contact'] = False
-            context.user_data['booking_user_id'] = user.id
             await send_booking_to_admin(update, context, user)
             await update.message.reply_text(
                 "✅ **Запись принята!**\n\nМенеджер свяжется с вами. ⏳\n\nВернуться в меню: /start",
@@ -541,8 +540,6 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     budget = context.user_data.get('budget', 'Не указан')
     wishes = context.user_data.get('wishes', 'Нет')
     extras = context.user_data.get('extras', 'Нет')
-    service_id = context.user_data.get('selected_service_id', '')
-    
     try:
         date_obj = datetime.fromisoformat(date_str)
         date_formatted = date_obj.strftime("%d.%m.%Y")
@@ -551,27 +548,8 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         date_display = f"{date_formatted} ({weekday})"
     except:
         date_display = date_str
-    
-    # Кнопки для админа (с учётом типа услуги)
-    is_build_service = service_id in ["service_4", "service_5"]
-    
-    if is_build_service:
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Подтвердить", callback_data="booking_confirm"),
-                InlineKeyboardButton("❌ Отказать", callback_data="booking_reject")
-            ]
-        ]
-    else:
-        keyboard = [
-            [
-                InlineKeyboardButton("✅ Подтвердить", callback_data="booking_confirm"),
-                InlineKeyboardButton("❌ Отменить", callback_data="booking_cancel")
-            ]
-        ]
-    
+    keyboard = [[InlineKeyboardButton("✅ Подтвердить", callback_data="booking_confirm"), InlineKeyboardButton("❌ Отменить", callback_data="booking_cancel")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
     caption = f"💵 **НОВАЯ ЗАПИСЬ**\n\n👤 @{user.username} (ID: {user.id})\n📱 Контакт: {contact}\n🛠 {service}\n📅 {date_display}\n🕐 {time_str}\n"
     if budget and budget != "Не требуется" and budget != "Не указан":
         caption += f"💰 Бюджет: {budget}\n"
@@ -579,7 +557,6 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         caption += f"📝 Пожелания:\n{wishes}\n"
     if extras and extras != "Нет":
         caption += f"➕ Дополнения:\n{extras}"
-    
     await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo, video, media_type):
@@ -651,7 +628,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА
+# 6. ОБРАБОТЧИК АДМИНА (ИСПРАВЛЕН)
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -673,67 +650,12 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     
     caption = msg.caption if msg.caption else msg.text
 
-    # === ЗАПИСЬ — ПОДТВЕРДИТЬ ===
+    # === ЗАПИСЬ ===
     if query.data == "booking_confirm":
-        user_id = context.user_data.get('booking_user_id')
-        if user_id:
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="✅ **Ваша запись подтверждена!**\n\nСпециалист свяжется с вами для уточнения деталей. ⏳",
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-        await query.edit_message_text(text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\nПользователь уведомлён.\n\n{caption}", parse_mode="Markdown")
+        await query.edit_message_text(text=f"✅ **Запись ПОДТВЕРЖДЕНА!**\n\n{caption}", parse_mode="Markdown")
         return
-
-    # === ЗАПИСЬ — ОТКАЗАТЬ (для сборок — с причиной) ===
-    if query.data == "booking_reject":
-        context.user_data['waiting_for_reject_reason'] = True
-        context.user_data['reject_user_id'] = context.user_data.get('booking_user_id')
-        context.user_data['selected_service'] = context.user_data.get('selected_service')
-        await query.edit_message_text(
-            text="✍️ **Напишите причину отказа:**\n\nЭто сообщение будет отправлено пользователю.",
-            parse_mode="Markdown"
-        )
-        return
-
-    # === ЗАПИСЬ — ОТМЕНИТЬ (для простых услуг) ===
     if query.data == "booking_cancel":
-        user_id = context.user_data.get('booking_user_id')
-        if user_id:
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="❌ **Ваша запись на услугу отменена.**\n\nЕсли у вас есть вопросы, свяжитесь с администрацией: @astcorepc01",
-                    parse_mode="Markdown"
-                )
-            except:
-                pass
-        await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\nПользователь уведомлён.\n\n{caption}", parse_mode="Markdown")
-        return
-
-    # === ОТЗЫВЫ ===
-    if query.data == "publish_review":
-        if CHANNEL_ID:
-            if photo:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
-            else:
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
-            if photo:
-                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
-            else:
-                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
-        else:
-            await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
-        return
-
-    if query.data == "reject_review":
-        if photo:
-            await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
-        else:
-            await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
+        await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}", parse_mode="Markdown")
         return
 
     # === ТИКЕТЫ ===
@@ -766,13 +688,17 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # === ОТЗЫВЫ — ОДОБРИТЬ ===
     if query.data == "review_approve":
         if CHANNEL_ID:
+            # Получаем сохранённые медиа и чистый текст
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
             review_clean_text = context.user_data.get('review_clean_text', 'Без текста')
             rating = context.user_data.get('rating', 0)
             
+            # Формируем ЧИСТЫЙ текст для канала (без служебной информации)
+            # Оценка: 3 ★ (как и просил пользователь)
             channel_text = f"⭐ **Оценка: {rating} ★**\n\n{review_clean_text}"
             
+            # Отправляем в канал с медиа
             if review_photo:
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
@@ -794,6 +720,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     parse_mode="Markdown"
                 )
             
+            # Уведомляем пользователя
             user_id = context.user_data.get('review_user_id')
             if user_id:
                 try:
@@ -805,6 +732,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 except:
                     pass
             
+            # Обновляем сообщение у админа
             if review_photo or review_video:
                 await query.edit_message_caption(
                     caption="✅ **Отзыв одобрен и опубликован в канале!**\n\nПользователь уведомлён.",
@@ -849,7 +777,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button_handler, pattern="^(review|support_menu|booking|back_to_main|back_to_services|back_to_booking_date|service_.*|date_.*|time_.*)$"))
     app.add_handler(CallbackQueryHandler(rating_handler, pattern="^rate_"))
     app.add_handler(CallbackQueryHandler(support_topic_handler, pattern="^support_topic_"))
-    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel|booking_reject|review_approve|review_reject)$"))
+    app.add_handler(CallbackQueryHandler(admin_callback_handler, pattern="^(publish_review|reject_review|ticket_accepted|ticket_closed|booking_confirm|booking_cancel|review_approve|review_reject)$"))
     app.add_handler(MessageHandler(filters.TEXT | filters.PHOTO | filters.VIDEO | filters.Document.ALL, handle_message))
     print("✅ Бот запущен!")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
