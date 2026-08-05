@@ -117,7 +117,8 @@ def clear_user_data(context):
         'waiting_for_reject_reason',
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
-        'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id'
+        'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id',
+        'review_media_group_id', 'review_media_type'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -338,13 +339,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.caption if update.message.caption else update.message.text
     photo = None
     video = None
+    media_type = None
 
     if update.message.photo:
         photo = update.message.photo[-1].file_id
+        media_type = "photo"
     elif update.message.video:
         video = update.message.video.file_id
+        media_type = "video"
     elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('image/'):
         photo = update.message.document.file_id
+        media_type = "photo"
 
     # === ВВОД ПРИЧИНЫ ОТКАЗА ===
     if context.user_data.get('waiting_for_reject_reason'):
@@ -477,8 +482,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['review_photo'] = photo
         context.user_data['review_video'] = video
         context.user_data['review_user_id'] = user.id
+        context.user_data['review_media_type'] = media_type
 
-        await send_review_to_admin(update, context, user, text or "Без текста", photo, video)
+        await send_review_to_admin(update, context, user, text or "Без текста", photo, video, media_type)
         
         await update.message.reply_text(
             "📋 **Ваш отзыв отправлен на модерацию.**\n\n"
@@ -552,7 +558,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         caption += f"➕ Дополнения:\n{extras}"
     await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
 
-async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo, video):
+async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo, video, media_type):
     rating = context.user_data.get('rating', 0)
     
     keyboard = [
@@ -566,6 +572,7 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['review_user_id'] = user.id
     context.user_data['review_photo'] = photo
     context.user_data['review_video'] = video
+    context.user_data['review_media_type'] = media_type
     
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
@@ -619,7 +626,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА
+# 6. ОБРАБОТЧИК АДМИНА (ИСПРАВЛЕН)
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -679,12 +686,13 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # === ОТЗЫВЫ — ОДОБРИТЬ (С ФОТО И ВИДЕО) ===
     if query.data == "review_approve":
         if CHANNEL_ID:
-            # Получаем сохранённые медиа
+            # Получаем сохранённые медиа из context.user_data
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
+            review_media_type = context.user_data.get('review_media_type')
             
             # Отправляем в канал с медиа
-            if review_photo:
+            if review_photo and review_media_type == "photo":
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
                     photo=review_photo,
