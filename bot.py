@@ -769,29 +769,28 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if CHANNEL_ID:
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
-            review_clean_text = context.user_data.get('review_clean_text', 'Без текста')
-            rating = context.user_data.get('rating', 0)
-            
-            channel_text = f"⭐ **Оценка: {rating} ★**\n\n{review_clean_text}"
+            # Используем полный caption из модерации (с "Новый отзыв", @username и т.д.)
+            # caption уже содержит весь текст от модерации
+            full_text = caption
             
             if review_photo:
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
                     photo=review_photo,
-                    caption=channel_text,
+                    caption=full_text,
                     parse_mode="Markdown"
                 )
             elif review_video:
                 await context.bot.send_video(
                     chat_id=CHANNEL_ID,
                     video=review_video,
-                    caption=channel_text,
+                    caption=full_text,
                     parse_mode="Markdown"
                 )
             else:
                 await context.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=channel_text,
+                    text=full_text,
                     parse_mode="Markdown"
                 )
             
