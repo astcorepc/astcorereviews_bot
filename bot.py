@@ -475,9 +475,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
+        context.user_data['review_video'] = video
         context.user_data['review_user_id'] = user.id
 
-        await send_review_to_admin(update, context, user, text or "Без текста", photo)
+        await send_review_to_admin(update, context, user, text or "Без текста", photo, video)
         
         await update.message.reply_text(
             "📋 **Ваш отзыв отправлен на модерацию.**\n\n"
@@ -551,7 +552,7 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
         caption += f"➕ Дополнения:\n{extras}"
     await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
 
-async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
+async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo, video):
     rating = context.user_data.get('rating', 0)
     
     keyboard = [
@@ -563,6 +564,8 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     context.user_data['review_user_id'] = user.id
+    context.user_data['review_photo'] = photo
+    context.user_data['review_video'] = video
     
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
@@ -575,6 +578,14 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
         await context.bot.send_photo(
             chat_id=ADMIN_ID,
             photo=photo,
+            caption=caption,
+            reply_markup=reply_markup,
+            parse_mode="Markdown"
+        )
+    elif video:
+        await context.bot.send_video(
+            chat_id=ADMIN_ID,
+            video=video,
             caption=caption,
             reply_markup=reply_markup,
             parse_mode="Markdown"
@@ -608,7 +619,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА
+# 6. ОБРАБОТЧИК АДМИНА (ИСПРАВЛЕН)
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -665,14 +676,33 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
             )
         return
 
-    # === ОТЗЫВЫ — ОДОБРИТЬ ===
+    # === ОТЗЫВЫ — ОДОБРИТЬ (С ФОТО И ВИДЕО) ===
     if query.data == "review_approve":
         if CHANNEL_ID:
-            if photo:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
-            else:
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
+            # Получаем сохранённые медиа
+            review_photo = context.user_data.get('review_photo')
+            review_video = context.user_data.get('review_video')
             
+            # Отправляем в канал с медиа
+            if review_photo:
+                await context.bot.send_photo(
+                    chat_id=CHANNEL_ID,
+                    photo=review_photo,
+                    caption=caption
+                )
+            elif review_video:
+                await context.bot.send_video(
+                    chat_id=CHANNEL_ID,
+                    video=review_video,
+                    caption=caption
+                )
+            else:
+                await context.bot.send_message(
+                    chat_id=CHANNEL_ID,
+                    text=caption
+                )
+            
+            # Уведомляем пользователя
             user_id = context.user_data.get('review_user_id')
             if user_id:
                 try:
@@ -684,7 +714,8 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 except:
                     pass
             
-            if photo:
+            # Обновляем сообщение у админа
+            if review_photo or review_video:
                 await query.edit_message_caption(
                     caption="✅ **Отзыв одобрен и опубликован в канале!**\n\nПользователь уведомлён.",
                     parse_mode="Markdown"
