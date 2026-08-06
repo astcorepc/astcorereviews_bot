@@ -438,7 +438,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 5. ОТЗЫВЫ - СОХРАНЯЕМ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
+    # 5. ОТЗЫВЫ
     # ==========================================
     if context.user_data.get('waiting_for_review'):
         if photo and not text:
@@ -456,14 +456,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         # Сохраняем данные пользователя и отзыва
+        username = f"@{user.username}" if user.username else f"ID: {user.id}"
         context.user_data['review_user_id'] = user.id
-        context.user_data['review_username'] = user.username
+        context.user_data['review_username'] = username
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         
         await send_review_to_admin(update, context, user, text or "Без текста", photo)
         
-        # Отправляем пользователю сообщение о модерации
         await update.message.reply_text(
             "✅ **Ваш отзыв отправлен на модерацию!**\n\n"
             "Мы проверим его и, если всё хорошо, опубликуем в нашем канале с отзывами. 📢\n\n"
@@ -543,14 +543,14 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
     rating = context.user_data.get('rating', 0)
+    username = f"@{user.username}" if user.username else f"ID: {user.id}"
     
-    # Сохраняем ID пользователя в самом сообщении для администратора
     keyboard = [
         [InlineKeyboardButton("✅ Опубликовать", callback_data="publish_review"), 
          InlineKeyboardButton("❌ Отклонить", callback_data="reject_review")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    caption = f"📩 **Новый отзыв**\n\n👤 @{user.username} (ID: {user.id})\n⭐ Оценка: {rating} ⭐\n📝 {text}"
+    caption = f"📩 **Новый отзыв**\n\n👤 {username} (ID: {user.id})\n⭐ Оценка: {rating} ⭐\n📝 {text}"
     if photo:
         await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
     else:
@@ -577,7 +577,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА С УВЕДОМЛЕНИЯМИ
+# 6. ОБРАБОТЧИК АДМИНА
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -613,11 +613,14 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         user_id_match = re.search(r"ID: (\d+)", caption)
         user_id = int(user_id_match.group(1)) if user_id_match else None
         
+        # Извлекаем никнейм пользователя из caption
+        username_match = re.search(r"👤 (.*?) \(ID", caption)
+        username_display = username_match.group(1) if username_match else "Клиент"
+        
         # Публикуем в канал
         if CHANNEL_ID:
-            # Убираем из текста информацию об ID пользователя для публикации
+            # Убираем из текста информацию об ID пользователя, но сохраняем никнейм
             clean_caption = re.sub(r"\(ID: \d+\)", "", caption)
-            clean_caption = re.sub(r"👤 @\w+", "👤 Клиент", clean_caption)
             
             if photo:
                 await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=clean_caption)
