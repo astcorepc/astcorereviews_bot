@@ -485,7 +485,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['review_video'] = video
         context.user_data['review_user_id'] = user.id
         context.user_data['review_media_type'] = media_type
-        context.user_data['review_clean_text'] = text or "Без текста"
 
         await send_review_to_admin(update, context, user, text or "Без текста", photo, video, media_type)
         
@@ -553,7 +552,6 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
     except:
         date_display = date_str
     
-    # Кнопки для админа (с учётом типа услуги)
     is_build_service = service_id in ["service_4", "service_5"]
     
     if is_build_service:
@@ -598,7 +596,6 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data['review_photo'] = photo
     context.user_data['review_video'] = video
     context.user_data['review_media_type'] = media_type
-    context.user_data['review_clean_text'] = text or "Без текста"
     
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
@@ -715,28 +712,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\nПользователь уведомлён.\n\n{caption}", parse_mode="Markdown")
         return
 
-    # === ОТЗЫВЫ ===
-    if query.data == "publish_review":
-        if CHANNEL_ID:
-            if photo:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
-            else:
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
-            if photo:
-                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
-            else:
-                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
-        else:
-            await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
-        return
-
-    if query.data == "reject_review":
-        if photo:
-            await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
-        else:
-            await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
-        return
-
     # === ТИКЕТЫ ===
     if query.data == "ticket_accepted":
         if photo or video or document:
@@ -769,32 +744,41 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         if CHANNEL_ID:
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
-            # Используем полный caption из модерации (с "Новый отзыв", @username и т.д.)
-            # caption уже содержит весь текст от модерации
-            full_text = caption
+            rating = context.user_data.get('rating', 0)
+            review_text = context.user_data.get('review_text', 'Без текста')
+            username = context.user_data.get('review_username', 'Пользователь')
+            user_id = context.user_data.get('review_user_id')
+            
+            # Формируем текст для канала (без "на модерацию")
+            channel_text = (
+                f"📩 **Новый отзыв**\n\n"
+                f"👤 @{username} (ID: {user_id})\n"
+                f"⭐ Оценка: {rating} ★\n"
+                f"📝 Текст:\n{review_text}"
+            )
             
             if review_photo:
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
                     photo=review_photo,
-                    caption=full_text,
+                    caption=channel_text,
                     parse_mode="Markdown"
                 )
             elif review_video:
                 await context.bot.send_video(
                     chat_id=CHANNEL_ID,
                     video=review_video,
-                    caption=full_text,
+                    caption=channel_text,
                     parse_mode="Markdown"
                 )
             else:
                 await context.bot.send_message(
                     chat_id=CHANNEL_ID,
-                    text=full_text,
+                    text=channel_text,
                     parse_mode="Markdown"
                 )
             
-            user_id = context.user_data.get('review_user_id')
+            # Уведомляем пользователя
             if user_id:
                 try:
                     await context.bot.send_message(
