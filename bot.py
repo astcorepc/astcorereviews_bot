@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from datetime import datetime, timedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -21,7 +22,7 @@ def main_keyboard():
         [InlineKeyboardButton("🛠 Поддержка", callback_data="support_menu")],
         [InlineKeyboardButton("💵 Запись на услуги", callback_data="booking")],
         [InlineKeyboardButton("📢 Наш канал", url="https://t.me/astcorepc1")],
-        [InlineKeyboardButton("⭐ Канал с отзывами", url="https://t.me/astcorereviews")]  # Новая кнопка
+        [InlineKeyboardButton("⭐ Канал с отзывами", url="https://t.me/astcorereviews")]
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -116,7 +117,8 @@ def clear_user_data(context):
         'waiting_for_review', 'waiting_for_support', 'waiting_for_contact',
         'waiting_for_budget', 'waiting_for_wishes', 'waiting_for_extras',
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
-        'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic'
+        'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
+        'review_user_id', 'review_username', 'review_text', 'review_photo'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -195,7 +197,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['selected_service'] = service
         context.user_data['selected_service_id'] = query.data
 
-        # === СБОРКА ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ ===
         if query.data == "service_4":
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Не указаны"
@@ -208,7 +209,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === СБОРКА ПОД КЛЮЧ ===
         elif query.data == "service_5":
             context.user_data['budget'] = "Не указан"
             context.user_data['wishes'] = "Не указаны"
@@ -221,7 +221,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ОСТАЛЬНЫЕ УСЛУГИ ===
         else:
             context.user_data['budget'] = "Не требуется"
             context.user_data['wishes'] = "Нет"
@@ -256,7 +255,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         weekday = weekday_names.get(date_obj.weekday(), "")
         service_id = context.user_data.get('selected_service_id', '')
 
-        # === ДЛЯ "ИЗ ВАШИХ КОМПЛЕКТУЮЩИХ" — ДОПОЛНЕНИЯ ===
         if service_id == "service_4" and context.user_data.get('extras') is None:
             context.user_data['waiting_for_extras'] = True
             await query.edit_message_text(
@@ -266,7 +264,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ДЛЯ "ПОД КЛЮЧ" — проверяем, есть ли пожелания ===
         if service_id == "service_5" and context.user_data.get('wishes') == "Не указаны":
             context.user_data['waiting_for_wishes'] = True
             await query.edit_message_text(
@@ -276,7 +273,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # === ФИНАЛЬНОЕ СООБЩЕНИЕ (с учетом типа услуги) ===
         is_build_service = service_id in ["service_4", "service_5"]
         
         if is_build_service:
@@ -344,7 +340,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     photo = None
     video = None
 
-    # Проверяем, есть ли фото или видео
     if update.message.photo:
         photo = update.message.photo[-1].file_id
     elif update.message.video:
@@ -443,7 +438,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # ==========================================
-    # 5. ОТЗЫВЫ
+    # 5. ОТЗЫВЫ - СОХРАНЯЕМ ДАННЫЕ ПОЛЬЗОВАТЕЛЯ
     # ==========================================
     if context.user_data.get('waiting_for_review'):
         if photo and not text:
@@ -460,19 +455,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # Сохраняем данные пользователя и отзыва
+        context.user_data['review_user_id'] = user.id
+        context.user_data['review_username'] = user.username
+        context.user_data['review_text'] = text or "Без текста"
+        context.user_data['review_photo'] = photo
+        
         await send_review_to_admin(update, context, user, text or "Без текста", photo)
         
-        context.user_data['waiting_for_review'] = False
-        clear_user_data(context)
-        
+        # Отправляем пользователю сообщение о модерации
         await update.message.reply_text(
-            "✅ **Спасибо за ваш отзыв!**\n\nОн отправлен на модерацию. ❤️",
+            "✅ **Ваш отзыв отправлен на модерацию!**\n\n"
+            "Мы проверим его и, если всё хорошо, опубликуем в нашем канале с отзывами. 📢\n\n"
+            "Вы получите уведомление о результате модерации.",
             parse_mode="Markdown"
         )
+        
+        context.user_data['waiting_for_review'] = False
         return
 
     # ==========================================
-    # 6. ТИКЕТЫ (с поддержкой видео)
+    # 6. ТИКЕТЫ
     # ==========================================
     if context.user_data.get('waiting_for_support'):
         file_id = None
@@ -540,14 +543,18 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
     rating = context.user_data.get('rating', 0)
-    keyboard = [[InlineKeyboardButton("✅ Опубликовать", callback_data="publish_review"), InlineKeyboardButton("❌ Отклонить", callback_data="reject_review")]]
+    
+    # Сохраняем ID пользователя в самом сообщении для администратора
+    keyboard = [
+        [InlineKeyboardButton("✅ Опубликовать", callback_data="publish_review"), 
+         InlineKeyboardButton("❌ Отклонить", callback_data="reject_review")]
+    ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     caption = f"📩 **Новый отзыв**\n\n👤 @{user.username} (ID: {user.id})\n⭐ Оценка: {rating} ⭐\n📝 {text}"
     if photo:
         await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
     else:
         await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
-    await update.message.reply_text("✅ **Спасибо за отзыв!**\n\nОн отправлен на модерацию. ❤️", parse_mode="Markdown")
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
     topic = context.user_data.get('support_topic', 'Без темы')
@@ -570,7 +577,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА (исправлен для видео)
+# 6. ОБРАБОТЧИК АДМИНА С УВЕДОМЛЕНИЯМИ
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -581,7 +588,6 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     video = None
     document = None
     
-    # Проверяем, что пришло
     if msg.photo:
         photo = msg.photo[-1].file_id
     elif msg.video:
@@ -601,29 +607,71 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
         await query.edit_message_text(text=f"❌ **Запись ОТМЕНЕНА**\n\n{caption}", parse_mode="Markdown")
         return
 
-    # --- ОТЗЫВЫ ---
+    # --- ОТЗЫВЫ С УВЕДОМЛЕНИЯМИ ---
     if query.data == "publish_review":
+        # Извлекаем ID пользователя из caption
+        user_id_match = re.search(r"ID: (\d+)", caption)
+        user_id = int(user_id_match.group(1)) if user_id_match else None
+        
+        # Публикуем в канал
         if CHANNEL_ID:
+            # Убираем из текста информацию об ID пользователя для публикации
+            clean_caption = re.sub(r"\(ID: \d+\)", "", caption)
+            clean_caption = re.sub(r"👤 @\w+", "👤 Клиент", clean_caption)
+            
             if photo:
-                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=clean_caption)
             else:
-                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=clean_caption)
+            
+            # Отправляем уведомление пользователю об одобрении
+            if user_id:
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text="✅ **Ваш отзыв опубликован в нашем канале с отзывами!**\n\n"
+                             "Спасибо, что поделились своим мнением! 🙏\n\n"
+                             "📢 Посмотреть отзыв можно здесь: https://t.me/astcorereviews",
+                        parse_mode="Markdown"
+                    )
+                    logging.info(f"Уведомление об одобрении отправлено пользователю {user_id}")
+                except Exception as e:
+                    logging.error(f"Не удалось отправить уведомление об одобрении пользователю {user_id}: {e}")
+            
             if photo:
-                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
+                await query.edit_message_caption(caption="✅ **Опубликовано в канале**\n\nУведомление отправлено пользователю.", parse_mode="Markdown")
             else:
-                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
+                await query.edit_message_text(text="✅ **Опубликовано в канале**\n\nУведомление отправлено пользователю.", parse_mode="Markdown")
         else:
             await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
         return
 
     if query.data == "reject_review":
+        # Извлекаем ID пользователя из caption
+        user_id_match = re.search(r"ID: (\d+)", caption)
+        user_id = int(user_id_match.group(1)) if user_id_match else None
+        
+        # Отправляем уведомление об отклонении
+        if user_id:
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text="❌ **Ваш отзыв не прошел модерацию.**\n\n"
+                         "К сожалению, мы не можем опубликовать его в нашем канале.\n\n"
+                         "Вы можете оставить новый отзыв, нажав на кнопку 'Подать отзыв' в меню. 💬",
+                    parse_mode="Markdown"
+                )
+                logging.info(f"Уведомление об отклонении отправлено пользователю {user_id}")
+            except Exception as e:
+                logging.error(f"Не удалось отправить уведомление об отклонении пользователю {user_id}: {e}")
+        
         if photo:
-            await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
+            await query.edit_message_caption(caption="❌ **Отзыв отклонён**\n\nУведомление отправлено пользователю.", parse_mode="Markdown")
         else:
-            await query.edit_message_text(text="❌ **Отзыв отклонён**", parse_mode="Markdown")
+            await query.edit_message_text(text="❌ **Отзыв отклонён**\n\nУведомление отправлено пользователю.", parse_mode="Markdown")
         return
 
-    # --- ТИКЕТЫ (исправлено: теперь работает с видео) ---
+    # --- ТИКЕТЫ ---
     if query.data == "ticket_accepted":
         if photo or video or document:
             await query.edit_message_caption(
