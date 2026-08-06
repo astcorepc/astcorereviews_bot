@@ -119,7 +119,7 @@ def clear_user_data(context):
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
         'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
         'review_user_id', 'review_text', 'review_photo', 'review_video', 'reject_user_id',
-        'review_media_type', 'review_clean_text', 'booking_user_id'
+        'review_media_type', 'review_clean_text', 'booking_user_id', 'review_username'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -480,11 +480,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+        # СОХРАНЯЕМ ВСЕ ДАННЫЕ ОТЗЫВА
         context.user_data['review_text'] = text or "Без текста"
         context.user_data['review_photo'] = photo
         context.user_data['review_video'] = video
         context.user_data['review_user_id'] = user.id
+        context.user_data['review_username'] = user.username or "Пользователь"
         context.user_data['review_media_type'] = media_type
+        context.user_data['rating'] = context.user_data.get('rating', 0)
 
         await send_review_to_admin(update, context, user, text or "Без текста", photo, video, media_type)
         
@@ -592,14 +595,18 @@ async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
+    # ЯВНО СОХРАНЯЕМ ВСЕ ДАННЫЕ
     context.user_data['review_user_id'] = user.id
+    context.user_data['review_username'] = user.username or "Пользователь"
     context.user_data['review_photo'] = photo
     context.user_data['review_video'] = video
     context.user_data['review_media_type'] = media_type
+    context.user_data['review_text'] = text or "Без текста"
+    context.user_data['rating'] = rating
     
     caption = (
         f"📩 **Новый отзыв на модерацию**\n\n"
-        f"👤 @{user.username} (ID: {user.id})\n"
+        f"👤 @{user.username or 'Пользователь'} (ID: {user.id})\n"
         f"⭐ Оценка: {rating} ★\n"
         f"📝 Текст:\n{text}"
     )
@@ -742,14 +749,15 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
     # === ОТЗЫВЫ — ОДОБРИТЬ ===
     if query.data == "review_approve":
         if CHANNEL_ID:
+            # БЕРЁМ ДАННЫЕ ИЗ context.user_data
             review_photo = context.user_data.get('review_photo')
             review_video = context.user_data.get('review_video')
-            rating = context.user_data.get('rating', 0)
             review_text = context.user_data.get('review_text', 'Без текста')
+            rating = context.user_data.get('rating', 0)
             username = context.user_data.get('review_username', 'Пользователь')
             user_id = context.user_data.get('review_user_id')
             
-            # Формируем текст для канала (без "на модерацию")
+            # ФОРМИРУЕМ ТЕКСТ ДЛЯ КАНАЛА
             channel_text = (
                 f"📩 **Новый отзыв**\n\n"
                 f"👤 @{username} (ID: {user_id})\n"
@@ -757,6 +765,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 f"📝 Текст:\n{review_text}"
             )
             
+            # ОТПРАВЛЯЕМ В КАНАЛ С МЕДИА
             if review_photo:
                 await context.bot.send_photo(
                     chat_id=CHANNEL_ID,
@@ -778,7 +787,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                     parse_mode="Markdown"
                 )
             
-            # Уведомляем пользователя
+            # УВЕДОМЛЯЕМ ПОЛЬЗОВАТЕЛЯ
             if user_id:
                 try:
                     await context.bot.send_message(
@@ -789,6 +798,7 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
                 except:
                     pass
             
+            # ОБНОВЛЯЕМ СООБЩЕНИЕ У АДМИНА
             if review_photo or review_video:
                 await query.edit_message_caption(
                     caption="✅ **Отзыв одобрен и опубликован в канале!**\n\nПользователь уведомлён.",
