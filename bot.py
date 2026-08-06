@@ -8,7 +8,6 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 TOKEN = os.getenv("BOT_TOKEN")
 ADMIN_ID = int(os.getenv("ADMIN_ID"))
 CHANNEL_ID = os.getenv("CHANNEL_ID")
-REVIEWS_CHANNEL_ID = os.getenv("REVIEWS_CHANNEL_ID")  # Новый канал для отзывов
 
 logging.basicConfig(level=logging.INFO)
 
@@ -117,8 +116,7 @@ def clear_user_data(context):
         'waiting_for_review', 'waiting_for_support', 'waiting_for_contact',
         'waiting_for_budget', 'waiting_for_wishes', 'waiting_for_extras',
         'selected_service', 'selected_service_id', 'selected_date', 'selected_time',
-        'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic',
-        'review_text', 'review_photo'  # Добавляем для хранения отзыва
+        'rating', 'budget', 'wishes', 'extras', 'contact', 'support_topic'
     ]
     for key in keys_to_clear:
         if key in context.user_data:
@@ -462,26 +460,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
-        # Сохраняем отзыв в user_data для последующей отправки уведомления
-        context.user_data['review_text'] = text or "Без текста"
-        context.user_data['review_photo'] = photo
-        context.user_data['review_user_id'] = user.id
-        context.user_data['review_username'] = user.username
-        
         await send_review_to_admin(update, context, user, text or "Без текста", photo)
         
-        # Отправляем сообщение пользователю о модерации
+        context.user_data['waiting_for_review'] = False
+        clear_user_data(context)
+        
         await update.message.reply_text(
-            "✅ **Ваш отзыв отправлен на модерацию!**\n\n"
-            "Мы проверим его и, если всё хорошо, опубликуем в нашем канале с отзывами. 📢\n\n"
-            "Вы получите уведомление о результате модерации.",
+            "✅ **Спасибо за ваш отзыв!**\n\nОн отправлен на модерацию. ❤️",
             parse_mode="Markdown"
         )
-        
-        context.user_data['waiting_for_review'] = False
-        # НЕ очищаем user_data полностью, чтобы сохранить данные для уведомления
-        # Очищаем только флаги ожидания
-        context.user_data['waiting_for_review'] = False
         return
 
     # ==========================================
@@ -553,20 +540,14 @@ async def send_booking_to_admin(update: Update, context: ContextTypes.DEFAULT_TY
 
 async def send_review_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, photo):
     rating = context.user_data.get('rating', 0)
-    # Сохраняем ID пользователя для отправки уведомления
-    context.user_data['review_user_id'] = user.id
-    context.user_data['review_username'] = user.username
-    
-    keyboard = [
-        [InlineKeyboardButton("✅ Опубликовать", callback_data="publish_review"), 
-         InlineKeyboardButton("❌ Отклонить", callback_data="reject_review")]
-    ]
+    keyboard = [[InlineKeyboardButton("✅ Опубликовать", callback_data="publish_review"), InlineKeyboardButton("❌ Отклонить", callback_data="reject_review")]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     caption = f"📩 **Новый отзыв**\n\n👤 @{user.username} (ID: {user.id})\n⭐ Оценка: {rating} ⭐\n📝 {text}"
     if photo:
         await context.bot.send_photo(chat_id=ADMIN_ID, photo=photo, caption=caption, reply_markup=reply_markup, parse_mode="Markdown")
     else:
         await context.bot.send_message(chat_id=ADMIN_ID, text=caption, reply_markup=reply_markup, parse_mode="Markdown")
+    await update.message.reply_text("✅ **Спасибо за отзыв!**\n\nОн отправлен на модерацию. ❤️", parse_mode="Markdown")
 
 async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYPE, user, text, file_id, file_type):
     topic = context.user_data.get('support_topic', 'Без темы')
@@ -589,7 +570,7 @@ async def send_ticket_to_admin(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
 # ==========================================
-# 6. ОБРАБОТЧИК АДМИНА (исправлен для видео и уведомлений)
+# 6. ОБРАБОТЧИК АДМИНА (исправлен для видео)
 # ==========================================
 
 async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -622,62 +603,20 @@ async def admin_callback_handler(update: Update, context: ContextTypes.DEFAULT_T
 
     # --- ОТЗЫВЫ ---
     if query.data == "publish_review":
-        # Извлекаем ID пользователя из caption
-        import re
-        user_id_match = re.search(r"ID: (\d+)", caption)
-        user_id = int(user_id_match.group(1)) if user_id_match else None
-        
-        # Публикуем в канал отзывов
-        if REVIEWS_CHANNEL_ID:
-            # Убираем из текста информацию об ID пользователя
-            clean_caption = re.sub(r"\(ID: \d+\)", "", caption)
-            clean_caption = re.sub(r"👤 @\w+", "👤 Клиент", clean_caption)
-            
+        if CHANNEL_ID:
             if photo:
-                await context.bot.send_photo(chat_id=REVIEWS_CHANNEL_ID, photo=photo, caption=clean_caption)
+                await context.bot.send_photo(chat_id=CHANNEL_ID, photo=photo, caption=caption)
             else:
-                await context.bot.send_message(chat_id=REVIEWS_CHANNEL_ID, text=clean_caption)
-            
-            # Отправляем уведомление пользователю
-            if user_id:
-                try:
-                    await context.bot.send_message(
-                        chat_id=user_id,
-                        text="✅ **Ваш отзыв опубликован в нашем канале с отзывами!**\n\n"
-                             "Спасибо, что поделились своим мнением! 🙏\n\n"
-                             "📢 Посмотреть отзыв можно здесь: https://t.me/astcorereviews",
-                        parse_mode="Markdown"
-                    )
-                except Exception as e:
-                    logging.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
-            
+                await context.bot.send_message(chat_id=CHANNEL_ID, text=caption)
             if photo:
-                await query.edit_message_caption(caption="✅ **Опубликовано в канале отзывов**", parse_mode="Markdown")
+                await query.edit_message_caption(caption="✅ **Опубликовано в канале**", parse_mode="Markdown")
             else:
-                await query.edit_message_text(text="✅ **Опубликовано в канале отзывов**", parse_mode="Markdown")
+                await query.edit_message_text(text="✅ **Опубликовано в канале**", parse_mode="Markdown")
         else:
-            await query.edit_message_text(text="⚠️ Канал отзывов не настроен. Добавь REVIEWS_CHANNEL_ID в Railway.", parse_mode="Markdown")
+            await query.edit_message_text(text="⚠️ Канал не настроен. Добавь CHANNEL_ID в Railway.", parse_mode="Markdown")
         return
 
     if query.data == "reject_review":
-        # Извлекаем ID пользователя из caption
-        import re
-        user_id_match = re.search(r"ID: (\d+)", caption)
-        user_id = int(user_id_match.group(1)) if user_id_match else None
-        
-        # Отправляем уведомление об отклонении
-        if user_id:
-            try:
-                await context.bot.send_message(
-                    chat_id=user_id,
-                    text="❌ **Ваш отзыв не прошел модерацию.**\n\n"
-                         "К сожалению, мы не можем опубликовать его в нашем канале.\n\n"
-                         "Вы можете оставить новый отзыв, нажав на кнопку 'Подать отзыв' в меню. 💬",
-                    parse_mode="Markdown"
-                )
-            except Exception as e:
-                logging.error(f"Не удалось отправить уведомление пользователю {user_id}: {e}")
-        
         if photo:
             await query.edit_message_caption(caption="❌ **Отзыв отклонён**", parse_mode="Markdown")
         else:
